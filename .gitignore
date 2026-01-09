@@ -1,0 +1,32 @@
+# Swift
+.build/
+*.swift.bak
+*.swiftmodule/
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+*.dSYM/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.Trash/
+
+# Runtime
+*.o
+*.so
+*.dylib
+*.dll
+
+# Misc
+.env
+.env.local
