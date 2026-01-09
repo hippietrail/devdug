@@ -1,0 +1,53 @@
+<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+  <!-- Geological cross-section focus - more layers, more artifacts visible -->
+  <defs>
+    <pattern id="dirt" patternUnits="userSpaceOnUse" width="4" height="4">
+      <rect width="4" height="4" fill="#8B6F47"/>
+      <circle cx="2" cy="2" r="1" fill="#6B5436" opacity="0.5"/>
+    </pattern>
+  </defs>
+
+  <!-- Multiple visible soil strata -->
+  <rect x="10" y="75" width="180" height="12" fill="#C19A6B"/>
+  <rect x="10" y="87" width="180" height="12" fill="#A0826D"/>
+  <rect x="10" y="99" width="180" height="12" fill="#8B7355"/>
+  <rect x="10" y="111" width="180" height="12" fill="#6B5344"/>
+  <rect x="10" y="123" width="180" height="12" fill="#5C4033"/>
+  <rect x="10" y="135" width="180" height="40" fill="url(#dirt)"/>
+
+  <!-- Artifacts at different depths (increasingly buried) -->
+  <g id="deep-artifacts">
+    <!-- Shallow: npm project -->
+    <rect x="25" y="80" width="14" height="8" fill="#CC3333" opacity="0.9"/>
+    <text x="32" y="86" font-size="5" fill="#fff" text-anchor="middle" font-weight="bold">npm</text>
+    
+    <!-- Mid: Rust project -->
+    <rect x="100" y="105" width="14" height="8" fill="#D2691E" opacity="0.8"/>
+    <text x="107" y="111" font-size="5" fill="#fff" text-anchor="middle" font-weight="bold">rs</text>
+    
+    <!-- Deep: Old Xcode -->
+    <rect x="155" y="118" width="14" height="8" fill="#4A90E2" opacity="0.7"/>
+    <text x="162" y="124" font-size="5" fill="#fff" text-anchor="middle" font-weight="bold">xc</text>
+    
+    <!-- Very deep: mysterious -->
+    <rect x="50" y="140" width="12" height="10" fill="#777777" opacity="0.6"/>
+  </g>
+
+  <!-- Shovel digging into layers - positioned at angle -->
+  <g id="shovel-angled" transform="translate(100, 50) rotate(-25)">
+    <!-- Handle -->
+    <rect x="-2" y="0" width="4" height="50" fill="#8B4513" rx="2"/>
+    <!-- Blade -->
+    <ellipse cx="0" cy="55" rx="16" ry="10" fill="#A9A9A9"/>
+    <ellipse cx="0" cy="54" rx="12" ry="7" fill="#D3D3D3" opacity="0.8"/>
+  </g>
+
+  <!-- Layer labels (subtle) -->
+  <text x="185" y="80" font-size="7" fill="#6B5344" opacity="0.4">recent</text>
+  <text x="185" y="125" font-size="7" fill="#6B5344" opacity="0.4">old</text>
+
+  <text x="100" y="210" font-family="serif" font-size="24" font-weight="bold" 
+        text-anchor="middle" fill="#5C4033">devdug</text>
+  <text x="100" y="228" font-family="serif" font-size="8" 
+        text-anchor="middle" fill="#8B7355" opacity="0.6">stratigraphic analysis</text>
+</svg>
