@@ -30,18 +30,41 @@ struct ANSI {
 }
 
 class TerminalUI {
-    private let maxRows: Int
-    private let statusRow: Int
+    private let scrollRegionTop = 1
+    private let scrollRegionBottom = 23  // Leave last 1-2 lines for status
     private var isSetup = false
+    private var projectCounts: [String: Int] = [:]
     
-    init(maxRows: Int = 24) {
-        self.maxRows = maxRows
-        self.statusRow = maxRows  // Last line is status
+    init() {}
+    
+    func recordProject(type: String) {
+        projectCounts[type, default: 0] += 1
+    }
+    
+    private func buildStatusLine() -> String {
+        let counts = projectCounts
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key): \($0.value)" }
+            .joined(separator: " | ")
+        
+        let totalProjects = projectCounts.values.reduce(0, +)
+        return "Total: \(totalProjects) | \(counts)"
+    }
+    
+    func updateStatus() {
+        let statusMsg = buildStatusLine()
+        
+        // Update status line(s) at bottom - simple, stable approach
+        print(ANSI.saveCursor, terminator: "")
+        print(ANSI.moveTo(row: 24, col: 1), terminator: "")
+        print("\(ANSI.dim)⧏ \(statusMsg)\(ANSI.clearLine())\(ANSI.reset)", terminator: "")
+        print(ANSI.restoreCursor, terminator: "")
+        fflush(stdout)
     }
     
     func setup() {
-        print(ANSI.saveCursor, terminator: "")
-        print(ANSI.setScrollRegion(top: 1, bottom: statusRow - 1), terminator: "")
+        // Set scroll region: lines 1-23, status on line 24
+        print(ANSI.setScrollRegion(top: scrollRegionTop, bottom: scrollRegionBottom), terminator: "")
         fflush(stdout)
         isSetup = true
     }
@@ -49,18 +72,9 @@ class TerminalUI {
     func cleanup() {
         if isSetup {
             print(ANSI.resetScrollRegion, terminator: "")
-            print(ANSI.restoreCursor, terminator: "")
             fflush(stdout)
             isSetup = false
         }
-    }
-    
-    func updateStatus(_ message: String) {
-        print(ANSI.saveCursor, terminator: "")
-        print(ANSI.moveTo(row: statusRow, col: 1), terminator: "")
-        print("\(ANSI.dim)⧏ \(message)\(ANSI.clearLine())\(ANSI.reset)", terminator: "")
-        print(ANSI.restoreCursor, terminator: "")
-        fflush(stdout)
     }
     
     func printMessage(_ message: String) {
@@ -331,9 +345,10 @@ func scanHomeDirectoryForProjects(verbose: Bool = false, ui: TerminalUI? = nil) 
                 ui?.printMessage(msg) ?? print(msg)
             }
             
-            // Update status bar
+            // Record and update status bar
             if let ui = ui {
-                ui.updateStatus("Found \(projects.count) projects in home...")
+                ui.recordProject(type: type)
+                ui.updateStatus()
             }
             
             // Don't descend into projects we found
@@ -540,9 +555,10 @@ func discoverProjects(in locations: [(path: String, ide: String)], verbose: Bool
                         ui?.printMessage(msg) ?? print(msg)
                     }
                     
-                    // Update status bar
+                    // Record and update status bar
                     if let ui = ui {
-                        ui.updateStatus("Found \(projects.count) projects...")
+                        ui.recordProject(type: type)
+                        ui.updateStatus()
                     }
                 }
             }
