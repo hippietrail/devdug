@@ -802,52 +802,74 @@ projects = Array(Set(projects.map { $0.path })).compactMap { path in
     projects.first { $0.path == path }
 }
 
-if config.dryRun || config.listOnly {
+if config.listOnly {
+    // Minimal list mode - just projects, no strategy
     print("🔍 devdug - Project Discovery\n")
     print("Mode: DRY-RUN (nothing will be deleted)\n")
     printProjects(projects)
+} else if config.dryRun {
+    // Default dry-run mode - show discovery + strategy
+    print("🔍 devdug - Project Discovery & Cleanup Plan\n")
+    print("Mode: DRY-RUN (nothing will be deleted)\n")
     
-    if !projects.isEmpty && !config.dryRun {
-        let totalSize = projects.reduce(0) { $0 + $1.size }
-        print("Total space: \(formatBytes(totalSize))")
-        print("\nTo clean these projects, use: devdug --clean -yy")
+    if projects.isEmpty {
+        print("No projects found.")
+        exit(0)
     }
+    
+    printProjects(projects)
+    print("\n" + String(repeating: "=", count: 60) + "\n")
+    
+    // Show strategy preview
+    printCleanupStrategy(projects)
+    
+    let totalSize = projects.reduce(0) { $0 + $1.size }
+    print("Total disk space: \(formatBytes(totalSize))")
+    print("\nTo actually clean these projects, use: devdug --clean -yy")
 } else {
-    // Clean mode
+    // Clean mode - requires manual confirmation before execution
     print("🧹 devdug - Cleanup Mode\n")
+    
+    // Reject any attempt to skip confirmations
+    if config.confirmationCount > 0 {
+        print("⛔️  ⛔️  ⛔️  CLEANUP CANNOT BE AUTOMATED ⛔️  ⛔️  ⛔️\n")
+        print("Flags like -y/--yes and --force are DISABLED for cleanup.")
+        print("This is intentional - you must manually review and confirm.")
+        print("\nReason: Lost Android Studio projects once? So did we.")
+        print("We're not letting that happen again.\n")
+        print("Required workflow:")
+        print("  1. Run: devdug (no flags)")
+        print("  2. Review the cleanup plan")
+        print("  3. Run: devdug --clean")
+        print("  4. Read each prompt carefully and type 'yes'\n")
+        exit(1)
+    }
     
     if projects.isEmpty {
         print("No projects to clean.")
         exit(0)
     }
     
+    // Show discovery
+    printProjects(projects)
+    print("\n" + String(repeating: "=", count: 60) + "\n")
+    
     // Show strategy preview for each project
     printCleanupStrategy(projects)
     
-    // Require at least 2 confirmations for actual cleanup
-    let requiredConfirmations = 2
+    // Require interactive confirmations (always - no way to skip)
+    print("⚠️  Manual confirmation required (cannot be skipped)\n")
     
-    if config.confirmationCount < 1 {
-        print("❌ Cleanup requires explicit confirmations.")
-        print("Use: devdug --clean -yy (pass --yes flag twice)")
-        print("Or:  devdug --clean --force (skip all confirmations - DANGEROUS)")
-        exit(1)
+    // First confirmation
+    if !requestConfirmation("Review complete. Are you sure you want to DELETE these projects?", confirmationNumber: 1) {
+        print("Aborted.")
+        exit(0)
     }
     
-    if config.confirmationCount < requiredConfirmations {
-        print("⚠️  Interactive confirmation required (pass -yy to skip)\n")
-        
-        // First confirmation
-        if !requestConfirmation("Review complete. Are you sure you want to DELETE these projects?", confirmationNumber: 1) {
-            print("Aborted.")
-            exit(0)
-        }
-        
-        // Second confirmation
-        if !requestConfirmation("THIS CANNOT BE UNDONE. Delete these projects permanently?", confirmationNumber: 2) {
-            print("Aborted.")
-            exit(0)
-        }
+    // Second confirmation
+    if !requestConfirmation("THIS CANNOT BE UNDONE. Delete these projects permanently?", confirmationNumber: 2) {
+        print("Aborted.")
+        exit(0)
     }
     
     // All confirmations passed
