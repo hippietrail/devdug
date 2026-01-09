@@ -193,41 +193,118 @@ func getIDECacheLocations() -> [String] {
     ]
 }
 
+func scanHomeDirectoryForProjects(verbose: Bool = false) -> [ProjectInfo] {
+    let fm = FileManager.default
+    let homeDir = fm.homeDirectoryForCurrentUser.path
+    var projects: [ProjectInfo] = []
+    
+    // Directories to skip (common non-project dirs)
+    let skipDirs = Set([
+        ".Trash", ".cache", ".local", ".config", ".ssh", ".vim",
+        "Library", "Applications", "Desktop", "Downloads", "Documents",
+        "node_modules", ".git", ".gradle", ".cargo", "__pycache__",
+        "venv", "env", ".venv", ".env", "build", "dist", "target"
+    ])
+    
+    guard let enumerator = fm.enumerator(atPath: homeDir) else { return [] }
+    
+    for case let item as String in enumerator {
+        // Only scan first two levels from home
+        let components = item.split(separator: "/", omittingEmptySubsequences: true)
+        if components.count > 2 {
+            enumerator.skipDescendants()
+            continue
+        }
+        
+        let fullPath = "\(homeDir)/\(item)"
+        var isDir: ObjCBool = false
+        
+        guard fm.fileExists(atPath: fullPath, isDirectory: &isDir),
+              isDir.boolValue else {
+            continue
+        }
+        
+        // Skip known non-project directories
+        let dirName = String(components.last ?? "")
+        if skipDirs.contains(dirName) || dirName.starts(with: ".") {
+            enumerator.skipDescendants()
+            continue
+        }
+        
+        // Try to detect project type
+        if let type = detectProjectType(fullPath) {
+            let size = getDirectorySize(fullPath)
+            let attributes = try? fm.attributesOfItem(atPath: fullPath)
+            let modDate = (attributes?[.modificationDate] as? Date) ?? Date()
+            
+            projects.append(ProjectInfo(
+                path: fullPath,
+                name: dirName,
+                type: type,
+                size: size,
+                lastModified: modDate
+            ))
+            
+            if verbose {
+                print("✓ Found \(dirName) (\(type)) in ~")
+            }
+            
+            // Don't descend into projects we found
+            enumerator.skipDescendants()
+        }
+    }
+    
+    return projects
+}
+
 func detectProjectType(_ path: String) -> String? {
     let fm = FileManager.default
     
-    // Check for Xcode project
+    // IDE-level projects (highest priority - most definitive)
     if fm.fileExists(atPath: "\(path)/.xcodeproj") {
         return "xcode"
     }
-    
-    // Check for IntelliJ
+    if fm.fileExists(atPath: "\(path)/.xcworkspace") {
+        return "xcode-workspace"
+    }
     if fm.fileExists(atPath: "\(path)/.idea") {
         return "intellij"
     }
     
-    // Check for Cargo/Rust
+    // Language-specific package managers & config
+    // Rust
     if fm.fileExists(atPath: "\(path)/Cargo.toml") {
         return "cargo"
     }
     
-    // Check for npm
-    if fm.fileExists(atPath: "\(path)/package.json") {
-        return "npm"
+    // Zig
+    if fm.fileExists(atPath: "\(path)/build.zig") {
+        return "zig"
     }
     
-    // Check for Python
-    if fm.fileExists(atPath: "\(path)/pyproject.toml") ||
-       fm.fileExists(atPath: "\(path)/setup.py") {
-        return "python"
-    }
-    
-    // Check for Go
+    // Go
     if fm.fileExists(atPath: "\(path)/go.mod") {
         return "go"
     }
     
-    // Check for Maven/Gradle
+    // JavaScript/Node
+    if fm.fileExists(atPath: "\(path)/package.json") {
+        return "npm"
+    }
+    
+    // Python
+    if fm.fileExists(atPath: "\(path)/pyproject.toml") {
+        return "python-poetry"
+    }
+    if fm.fileExists(atPath: "\(path)/setup.py") ||
+       fm.fileExists(atPath: "\(path)/setup.cfg") {
+        return "python-setuptools"
+    }
+    if fm.fileExists(atPath: "\(path)/requirements.txt") {
+        return "python-pip"
+    }
+    
+    // Java/JVM
     if fm.fileExists(atPath: "\(path)/pom.xml") {
         return "maven"
     }
@@ -236,9 +313,34 @@ func detectProjectType(_ path: String) -> String? {
         return "gradle"
     }
     
-    // Check for Swift Package Manager
+    // Swift
     if fm.fileExists(atPath: "\(path)/Package.swift") {
         return "swift-spm"
+    }
+    
+    // C/C++
+    if fm.fileExists(atPath: "\(path)/CMakeLists.txt") {
+        return "cmake"
+    }
+    if fm.fileExists(atPath: "\(path)/Makefile") {
+        return "make"
+    }
+    
+    // Build systems
+    if fm.fileExists(atPath: "\(path)/build.sh") ||
+       fm.fileExists(atPath: "\(path)/build.zsh") {
+        return "shell-build"
+    }
+    
+    // VCS detection as fallback (generic project)
+    if fm.fileExists(atPath: "\(path)/.git") {
+        // Could look inside .git/config to determine language, but not essential
+        return "git-repo"
+    }
+    
+    // Eclipse workspace detection
+    if fm.fileExists(atPath: "\(path)/.metadata") {
+        return "eclipse-workspace"
     }
     
     return nil
@@ -410,7 +512,18 @@ if config.verbose {
 }
 
 let locations = getStandardIDELocations()
-let projects = discoverProjects(in: locations, verbose: config.verbose)
+var projects = discoverProjects(in: locations, verbose: config.verbose)
+
+if config.verbose {
+    print("\n🏠 Scanning home directory for scattered projects...\n")
+}
+let homeProjects = scanHomeDirectoryForProjects(verbose: config.verbose)
+projects.append(contentsOf: homeProjects)
+
+// Remove duplicates (by path)
+projects = Array(Set(projects.map { $0.path })).compactMap { path in
+    projects.first { $0.path == path }
+}
 
 if config.dryRun || config.listOnly {
     print("🔍 devdug - Project Discovery\n")
