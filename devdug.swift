@@ -44,9 +44,29 @@ func parseArgs(_ args: [String]) -> Config {
             exit(0)
         default:
             if arg.starts(with: "-") {
-                print("Unknown flag: \(arg)")
-                printHelp()
-                exit(1)
+                // Handle combined flags like -yy, -vv, etc.
+                if arg.starts(with: "--") {
+                    print("Unknown flag: \(arg)")
+                    printHelp()
+                    exit(1)
+                }
+                
+                // Process combined short flags
+                for char in arg.dropFirst() {
+                    switch char {
+                    case "y":
+                        confirmations += 1
+                    case "v":
+                        verbose = true
+                    case "h":
+                        printHelp()
+                        exit(0)
+                    default:
+                        print("Unknown flag: -\(char)")
+                        printHelp()
+                        exit(1)
+                    }
+                }
             }
         }
     }
@@ -363,8 +383,11 @@ func printProjects(_ projects: [ProjectInfo]) {
     }
 }
 
-func requestConfirmation(_ message: String) -> Bool {
+func requestConfirmation(_ message: String, confirmationNumber: Int = 1) -> Bool {
     print("\n\(message)")
+    if confirmationNumber > 1 {
+        print("[\(confirmationNumber)/2] ", terminator: "")
+    }
     print("Continue? (yes/no): ", terminator: "")
     fflush(stdout)
     
@@ -412,19 +435,33 @@ if config.dryRun || config.listOnly {
     let totalSize = projects.reduce(0) { $0 + $1.size }
     print("Total space to reclaim: \(formatBytes(totalSize))\n")
     
+    // Require at least 2 confirmations for actual cleanup
+    let requiredConfirmations = 2
+    
     if config.confirmationCount < 1 {
-        print("❌ Cleanup requires at least one confirmation.")
-        print("Use: devdug --clean -yy (or add --yes flags)")
+        print("❌ Cleanup requires explicit confirmations.")
+        print("Use: devdug --clean -yy (pass --yes flag twice)")
+        print("Or:  devdug --clean --force (skip all confirmations - DANGEROUS)")
         exit(1)
     }
     
-    if config.confirmationCount < 2 {
-        if !requestConfirmation("⚠️  DOUBLE-CHECK: Are you sure you want to delete these projects?") {
+    if config.confirmationCount < requiredConfirmations {
+        print("⚠️  Interactive confirmation required (pass -yy to skip)\n")
+        
+        // First confirmation
+        if !requestConfirmation("Review complete. Are you sure you want to DELETE these projects?", confirmationNumber: 1) {
+            print("Aborted.")
+            exit(0)
+        }
+        
+        // Second confirmation
+        if !requestConfirmation("THIS CANNOT BE UNDONE. Delete these projects permanently?", confirmationNumber: 2) {
             print("Aborted.")
             exit(0)
         }
     }
     
-    // Actually delete (TODO: implement when ready)
-    print("✅ Ready to clean. (Cleanup not yet implemented)")
+    // All confirmations passed
+    print("\n✅ Confirmed. Ready to clean.")
+    print("(Actual cleanup not yet implemented)")
 }
