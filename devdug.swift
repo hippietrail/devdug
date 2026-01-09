@@ -716,6 +716,46 @@ func printProjects(_ projects: [ProjectInfo]) {
     }
 }
 
+func printCleanupStrategy(_ projects: [ProjectInfo]) {
+    if projects.isEmpty {
+        print("No projects to clean.")
+        return
+    }
+    
+    print("\(ANSI.bold)CLEANUP STRATEGY\(ANSI.reset)\n")
+    print("Review what will be cleaned for each project:\n")
+    
+    var totalEstimatedSize: UInt64 = 0
+    
+    for project in projects {
+        let emoji = projectEmoji(project.type)
+        let sizeStr = formatBytes(project.size)
+        
+        print("\(ANSI.bold)\(emoji) \(project.name)\(ANSI.reset) (\(project.type))")
+        print("  \(ANSI.dim)Size: \(sizeStr) | Path: \(project.path)\(ANSI.reset)")
+        
+        let actions = getCleanupActions(for: project.type, at: project.path)
+        
+        if actions.isEmpty {
+            print("  \(ANSI.dim)No automatic cleanup defined\(ANSI.reset)")
+        } else {
+            for action in actions {
+                let colored = action.colorize()
+                print("  \(colored)")
+            }
+            // Rough estimate: assume we can reclaim most of project size via cleanup
+            totalEstimatedSize += project.size
+        }
+        
+        print()
+    }
+    
+    print("\(ANSI.bold)Estimated space to reclaim: \(formatBytes(totalEstimatedSize))\(ANSI.reset)")
+    print("\n\(ANSI.yellow)Yellow actions (⚠️  tentative) require manual verification.\(ANSI.reset)")
+    print("\(ANSI.red)Red paths will be permanently deleted.\(ANSI.reset)")
+    print("\(ANSI.green)Green commands are safe to run.\(ANSI.reset)\n")
+}
+
 func requestConfirmation(_ message: String, confirmationNumber: Int = 1) -> Bool {
     print("\n\(message)")
     if confirmationNumber > 1 {
@@ -775,15 +815,14 @@ if config.dryRun || config.listOnly {
 } else {
     // Clean mode
     print("🧹 devdug - Cleanup Mode\n")
-    printProjects(projects)
     
     if projects.isEmpty {
         print("No projects to clean.")
         exit(0)
     }
     
-    let totalSize = projects.reduce(0) { $0 + $1.size }
-    print("Total space to reclaim: \(formatBytes(totalSize))\n")
+    // Show strategy preview for each project
+    printCleanupStrategy(projects)
     
     // Require at least 2 confirmations for actual cleanup
     let requiredConfirmations = 2
