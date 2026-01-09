@@ -82,36 +82,73 @@ func printHelp() {
     """)
 }
 
-// MARK: - Project Discovery
+// MARK: - IDE Detection & Project Locations
 
-func getStandardIDELocations() -> [String] {
-    let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+func getInstalledIDEs() -> Set<String> {
+    let fm = FileManager.default
+    var installed: Set<String> = []
     
-    return [
+    // Check for IDEs in /Applications
+    let appPaths = [
+        "/Applications/Xcode.app": "xcode",
+        "/Applications/IntelliJ IDEA.app": "intellij",
+        "/Applications/RustRover.app": "rustrover",
+        "/Applications/CLion.app": "clion",
+        "/Applications/GoLand.app": "goland",
+        "/Applications/PyCharm.app": "pycharm",
+        "/Applications/WebStorm.app": "webstorm",
+        "/Applications/AppCode.app": "appcode",
+        "/Applications/Android Studio.app": "android-studio",
+        "/Applications/Eclipse.app": "eclipse",
+    ]
+    
+    for (path, name) in appPaths {
+        if fm.fileExists(atPath: path) {
+            installed.insert(name)
+        }
+    }
+    
+    return installed
+}
+
+func getStandardIDELocations() -> [(path: String, ide: String)] {
+    let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+    var locations: [(String, String)] = []
+    
+    let ideMap: [(path: String, ide: String)] = [
         // IntelliJ variants
-        "\(homeDir)/IdeaProjects",
-        "\(homeDir)/RustroverProjects",
-        "\(homeDir)/CLionProjects",
-        "\(homeDir)/GolandProjects",
-        "\(homeDir)/PyCharmProjects",
-        "\(homeDir)/WebstormProjects",
-        "\(homeDir)/AppCodeProjects",
+        ("\(homeDir)/IdeaProjects", "idea"),
+        ("\(homeDir)/RustroverProjects", "rustrover"),
+        ("\(homeDir)/CLionProjects", "clion"),
+        ("\(homeDir)/GolandProjects", "goland"),
+        ("\(homeDir)/PyCharmProjects", "pycharm"),
+        ("\(homeDir)/WebstormProjects", "webstorm"),
+        ("\(homeDir)/AppCodeProjects", "appcode"),
         
         // Android
-        "\(homeDir)/Android Studio Projects",
+        ("\(homeDir)/Android Studio Projects", "android-studio"),
         
         // Eclipse
-        "\(homeDir)/eclipse-workspace",
-        "\(homeDir)/eclipse",
+        ("\(homeDir)/eclipse-workspace", "eclipse"),
+        ("\(homeDir)/eclipse", "eclipse"),
         
-        // Root-level projects (common)
-        "\(homeDir)/Projects",
-        "\(homeDir)/Source",
-        "\(homeDir)/Code",
+        // Xcode (no centralized location, but check common spots)
+        ("\(homeDir)/Library/Developer/Xcode/DerivedData", "xcode"),
         
-        // VSCode workspace files typically scattered
-        // No single location to scan
+        // Generic
+        ("\(homeDir)/Projects", "generic"),
+        ("\(homeDir)/Source", "generic"),
+        ("\(homeDir)/Code", "generic"),
     ]
+    
+    for (path, ide) in ideMap {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: path) {
+            locations.append((path, ide))
+        }
+    }
+    
+    return locations
 }
 
 func getIDECacheLocations() -> [String] {
@@ -223,27 +260,50 @@ func formatBytes(_ bytes: UInt64) -> String {
     return "\(formatted) \(units[unitIndex])"
 }
 
-func discoverProjects(in locations: [String], verbose: Bool = false) -> [ProjectInfo] {
+func resolveAliasOrSymlink(_ path: String) -> String {
+    let fm = FileManager.default
+    
+    // Try to resolve as symlink first
+    if let resolved = try? fm.destinationOfSymbolicLink(atPath: path) {
+        return resolved
+    }
+    
+    // For macOS aliases, try using NSURL
+    let url = NSURL(fileURLWithPath: path)
+    if let vals = try? url.resourceValues(forKeys: [.canonicalPathKey]),
+       let resolvedURL = vals[.canonicalPathKey] as? String {
+        return resolvedURL
+    }
+    
+    return path
+}
+
+func discoverProjects(in locations: [(path: String, ide: String)], verbose: Bool = false) -> [ProjectInfo] {
     let fm = FileManager.default
     var projects: [ProjectInfo] = []
     
-    for location in locations {
-        if !fm.fileExists(atPath: location) {
+    for (location, ide) in locations {
+        let resolvedPath = resolveAliasOrSymlink(location)
+        
+        // Check if it's actually a directory
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: resolvedPath, isDirectory: &isDir),
+              isDir.boolValue else {
             if verbose {
-                print("⊘ \(location) (not found)")
+                print("⊘ \(location) (not a directory)")
             }
             continue
         }
         
         do {
-            let contents = try fm.contentsOfDirectory(atPath: location)
+            let contents = try fm.contentsOfDirectory(atPath: resolvedPath)
             
             for item in contents {
-                let fullPath = "\(location)/\(item)"
-                var isDir: ObjCBool = false
+                let fullPath = "\(resolvedPath)/\(item)"
+                var itemIsDir: ObjCBool = false
                 
-                guard fm.fileExists(atPath: fullPath, isDirectory: &isDir),
-                      isDir.boolValue else {
+                guard fm.fileExists(atPath: fullPath, isDirectory: &itemIsDir),
+                      itemIsDir.boolValue else {
                     continue
                 }
                 
@@ -264,11 +324,15 @@ func discoverProjects(in locations: [String], verbose: Bool = false) -> [Project
                         size: size,
                         lastModified: modDate
                     ))
+                    
+                    if verbose {
+                        print("✓ Found \(item) (\(type)) in \(ide)")
+                    }
                 }
             }
         } catch {
             if verbose {
-                print("Error scanning \(location): \(error)")
+                print("✗ Error scanning \(location): \(error)")
             }
         }
     }
@@ -311,6 +375,16 @@ func requestConfirmation(_ message: String) -> Bool {
 // MARK: - Main
 
 let config = parseArgs(CommandLine.arguments)
+
+if config.verbose {
+    print("🔍 Checking for installed IDEs...\n")
+    let installed = getInstalledIDEs()
+    if installed.isEmpty {
+        print("No IDEs detected (but this is OK - scanning all standard locations)\n")
+    } else {
+        print("Detected: \(installed.sorted().joined(separator: ", "))\n")
+    }
+}
 
 let locations = getStandardIDELocations()
 let projects = discoverProjects(in: locations, verbose: config.verbose)
