@@ -39,7 +39,7 @@ class TerminalUI {
         projectCounts[type, default: 0] += 1
     }
     
-    private func buildStatusLine() -> String {
+    func buildStatusLine() -> String {
         let counts = projectCounts
             .sorted { $0.key < $1.key }
             .map { "\($0.key): \($0.value)" }
@@ -50,23 +50,18 @@ class TerminalUI {
     }
     
     func updateStatus() {
-        let statusMsg = buildStatusLine()
-        
-        // Jump to last line, update, jump back
-        print(ANSI.saveCursor, terminator: "")
-        print(ANSI.moveTo(row: 9999, col: 1), terminator: "")  // Jump to bottom (terminal will clip to last line)
-        print("\(ANSI.dim)⧏ \(statusMsg)\(ANSI.clearLine())\(ANSI.reset)", terminator: "")
-        print(ANSI.restoreCursor, terminator: "")
-        fflush(stdout)
+        // Don't update during discovery - avoids terminal scrolling issues
     }
     
     func setup() {
-        // No scroll region setup needed - just print normally
         isSetup = true
     }
     
     func cleanup() {
-        // Nothing to clean up
+        // Print final status after discovery completes
+        if !projectCounts.isEmpty {
+            print("\n\(ANSI.dim)⧏ \(buildStatusLine())\(ANSI.reset)")
+        }
         isSetup = false
     }
     
@@ -280,78 +275,63 @@ func scanHomeDirectoryForProjects(verbose: Bool = false, ui: TerminalUI? = nil) 
         "venv", "env", ".venv", ".env", ".npm"
     ])
     
-    // Directories that indicate we should stop descending (build artifacts, dependencies)
-    let stopDescendingDirs = Set([
-        "node_modules", "build", "dist", "target", ".build",
-        "DerivedData", "xcarchive"
-    ])
-    
-    guard let enumerator = fm.enumerator(atPath: homeDir) else { return [] }
-    
-    for case let item as String in enumerator {
-        let components = item.split(separator: "/", omittingEmptySubsequences: true)
+    // Breadth-first scan up to 3 levels deep
+    func scanLevel(_ dir: String, depth: Int) {
+        guard depth <= 3 else { return }
         
-        // Go up to 3 levels deep from home
-        if components.count > 3 {
-            enumerator.skipDescendants()
-            continue
-        }
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(atPath: dir) else { return }
         
-        let fullPath = "\(homeDir)/\(item)"
-        var isDir: ObjCBool = false
-        
-        guard fm.fileExists(atPath: fullPath, isDirectory: &isDir),
-              isDir.boolValue else {
-            continue
-        }
-        
-        let dirName = String(components.last ?? "")
-        
-        // Skip completely if in skip list or hidden
-        if skipDirs.contains(dirName) || dirName.starts(with: ".") {
-            enumerator.skipDescendants()
-            continue
-        }
-        
-        // Stop descending if we hit build artifacts
-        if stopDescendingDirs.contains(dirName) {
-            enumerator.skipDescendants()
-            continue
-        }
-        
-        // Try to detect project type
-        if let type = detectProjectType(fullPath) {
-            let size = getDirectorySize(fullPath)
-            let attributes = try? fm.attributesOfItem(atPath: fullPath)
-            let modDate = (attributes?[.modificationDate] as? Date) ?? Date()
+        for item in contents {
+            let fullPath = "\(dir)/\(item)"
+            var isDir: ObjCBool = false
             
-            projects.append(ProjectInfo(
-                path: fullPath,
-                name: dirName,
-                type: type,
-                size: size,
-                lastModified: modDate
-            ))
-            
-            if verbose {
-                let msg = "✓ Found \(dirName) (\(type)) in ~"
-                ui?.printMessage(msg) ?? print(msg)
+            guard fm.fileExists(atPath: fullPath, isDirectory: &isDir),
+                  isDir.boolValue else {
+                continue
             }
             
-            // Record and update status bar
-            if let ui = ui {
-                ui.recordProject(type: type)
-                ui.updateStatus()
+            // Skip hidden and explicitly excluded dirs
+            if item.starts(with: ".") || skipDirs.contains(item) {
+                continue
             }
             
-            // Don't descend into projects we found
-            enumerator.skipDescendants()
+            // Try to detect project at this level
+            if let type = detectProjectType(fullPath) {
+                let size = getDirectorySize(fullPath)
+                let attributes = try? fm.attributesOfItem(atPath: fullPath)
+                let modDate = (attributes?[.modificationDate] as? Date) ?? Date()
+                
+                projects.append(ProjectInfo(
+                    path: fullPath,
+                    name: item,
+                    type: type,
+                    size: size,
+                    lastModified: modDate
+                ))
+                
+                if verbose {
+                    let msg = "✓ Found \(item) (\(type)) in ~"
+                    ui?.printMessage(msg) ?? print(msg)
+                }
+                
+                if let ui = ui {
+                    ui.recordProject(type: type)
+                    ui.updateStatus()
+                }
+                
+                // Don't recurse into found projects
+                continue
+            }
+            
+            // No project found, recurse to next level
+            scanLevel(fullPath, depth: depth + 1)
         }
-        // If no project found, continue descending (could be a workspace dir)
-        }
-        
-        return projects
-        }
+    }
+    
+    scanLevel(homeDir, depth: 1)
+    return projects
+}
 
 func detectProjectType(_ path: String) -> String? {
     let fm = FileManager.default
@@ -444,24 +424,13 @@ func detectProjectType(_ path: String) -> String? {
 
 func getDirectorySize(_ path: String) -> UInt64 {
     let fm = FileManager.default
-    var totalSize: UInt64 = 0
     
-    guard let enumerator = fm.enumerator(atPath: path) else { return 0 }
-    
-    for case let file as String in enumerator {
-        let filePath = "\(path)/\(file)"
-        do {
-            let attributes = try fm.attributesOfItem(atPath: filePath)
-            if let fileSize = attributes[.size] as? UInt64 {
-                totalSize += fileSize
-            }
-        } catch {
-            // Skip files we can't read
-            continue
-        }
+    do {
+        let attributes = try fm.attributesOfItem(atPath: path)
+        return attributes[.size] as? UInt64 ?? 0
+    } catch {
+        return 0
     }
-    
-    return totalSize
 }
 
 func formatBytes(_ bytes: UInt64) -> String {
