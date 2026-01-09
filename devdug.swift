@@ -30,8 +30,6 @@ struct ANSI {
 }
 
 class TerminalUI {
-    private let scrollRegionTop = 1
-    private let scrollRegionBottom = 23  // Leave last 1-2 lines for status
     private var isSetup = false
     private var projectCounts: [String: Int] = [:]
     
@@ -54,27 +52,22 @@ class TerminalUI {
     func updateStatus() {
         let statusMsg = buildStatusLine()
         
-        // Update status line(s) at bottom - simple, stable approach
+        // Jump to last line, update, jump back
         print(ANSI.saveCursor, terminator: "")
-        print(ANSI.moveTo(row: 24, col: 1), terminator: "")
+        print(ANSI.moveTo(row: 9999, col: 1), terminator: "")  // Jump to bottom (terminal will clip to last line)
         print("\(ANSI.dim)⧏ \(statusMsg)\(ANSI.clearLine())\(ANSI.reset)", terminator: "")
         print(ANSI.restoreCursor, terminator: "")
         fflush(stdout)
     }
     
     func setup() {
-        // Set scroll region: lines 1-23, status on line 24
-        print(ANSI.setScrollRegion(top: scrollRegionTop, bottom: scrollRegionBottom), terminator: "")
-        fflush(stdout)
+        // No scroll region setup needed - just print normally
         isSetup = true
     }
     
     func cleanup() {
-        if isSetup {
-            print(ANSI.resetScrollRegion, terminator: "")
-            fflush(stdout)
-            isSetup = false
-        }
+        // Nothing to clean up
+        isSetup = false
     }
     
     func printMessage(_ message: String) {
