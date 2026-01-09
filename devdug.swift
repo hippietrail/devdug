@@ -72,6 +72,40 @@ class TerminalUI {
     }
 }
 
+// MARK: - Project Type Emojis
+
+let projectEmojis: [String: String] = [
+    "cargo": "🦀",
+    "npm": "📦",
+    "python-pip": "🐍",
+    "python-poetry": "🐍",
+    "python-setuptools": "🐍",
+    "gradle": "☕️",
+    "maven": "☕️",
+    "swift-spm": "🍎",
+    "xcode": "🍎",
+    "cmake": "📐",
+    "make": "🔨",
+    "go": "🐹",
+    "intellij-idea": "💡",
+    "android-studio": "🤖",
+    "rustrover": "🦀",
+    "clion": "⚙️",
+    "goland": "🐹",
+    "pycharm": "🐍",
+    "webstorm": "⚡️",
+    "appcode": "🍎",
+    "visual-studio": "🔷",
+    "eclipse-workspace": "🌀",
+    "zig": "⚡️",
+    "git-repo": "🔗",
+    "generic": "📁",
+]
+
+func projectEmoji(_ type: String) -> String {
+    return projectEmojis[type] ?? "📦"
+}
+
 // MARK: - Configuration & Types
 
 struct Config {
@@ -368,7 +402,8 @@ func scanHomeDirectoryForProjects(verbose: Bool = false, ui: TerminalUI? = nil) 
                 ))
                 
                 if verbose {
-                    let msg = "✓ Found \(item) (\(type)) in ~"
+                    let emoji = projectEmoji(type)
+                    let msg = "✓ \(emoji) Found \(item) (\(type)) in ~"
                     ui?.printMessage(msg) ?? print(msg)
                 }
                 
@@ -635,7 +670,8 @@ func discoverProjects(in locations: [(path: String, ide: String)], verbose: Bool
                     ))
                     
                     if verbose {
-                        let msg = "✓ Found \(item) (\(type)) in \(ide)"
+                        let emoji = projectEmoji(type)
+                        let msg = "✓ \(emoji) Found \(item) (\(type)) in \(ide)"
                         ui?.printMessage(msg) ?? print(msg)
                     }
                     
@@ -673,7 +709,8 @@ func printProjects(_ projects: [ProjectInfo]) {
     for project in projects {
         let dateStr = dateFormatter.string(from: project.lastModified)
         let sizeStr = formatBytes(project.size)
-        print("  📦 \(project.name)")
+        let emoji = projectEmoji(project.type)
+        print("  \(emoji) \(project.name)")
         print("     Type: \(project.type) | Size: \(sizeStr) | Modified: \(dateStr)")
         print("     Path: \(project.path)\n")
     }
