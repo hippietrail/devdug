@@ -2,21 +2,19 @@
 
 ![devdug logo](logo4.svg)
 
-A fast, safe tool for discovering and cleaning up scattered dev projects on macOS/Linux.
+Will be a fast, safe tool for discovering and cleaning up scattered dev projects on macOS/Linux.
 
-**Safety first**: devdug enforces manual confirmations to prevent accidental data loss. You must review the cleanup plan before execution, and confirm each action individually.
+**Safety first**: devdug will enforce manual confirmations to prevent accidental data loss. You must review the cleanup plan before execution, and confirm each action individually.
 
 ## Quick Start
 
 ```bash
 ./devdug          # Discover projects & show cleanup strategy
-./devdug --clean  # Review and confirm cleanup actions
+./devdug --clean  # Will review and confirm cleanup actions
 ./devdug -v       # Verbose mode: explain each cleanup action
 ```
 
-## Example Output
-
-Discovery and strategy preview on a typical hobby OSS developer's machine:
+## Example
 
 ```
 Discovery scan complete
@@ -66,17 +64,14 @@ Green commands are safe to run.
 
 Total disk space: 3.4 GB
 
-To actually clean these projects, use: devdug --clean
+To actually clean these projects, you would use: devdug --clean
 ```
 
 ## Features
 
-- **Fast discovery**: Breadth-first scanning, completes in <1 second
 - **Safe by design**: Enforced manual confirmations, dual-confirm for destructive actions
 - **Comprehensive project support**: Cargo, npm, Python, Gradle, Maven, Make, CMake, Go, Swift, Xcode, IntelliJ, Android Studio, Eclipse, and more
-- **Smart IDE detection**: Handles versioned IDE installations (e.g., `~/eclipse/java-2024-09/`)
 - **Visual feedback**: Color-coded cleanup actions (🟢 safe, 🟡 tentative, 🔴 destructive)
-- **Space analysis**: Shows top 3 space-saving projects and total recoverable space
 
 ## Supported Project Types
 
@@ -89,14 +84,14 @@ To actually clean these projects, use: devdug --clean
 - **JVM IDEs**: IntelliJ IDEA, Android Studio, Rustrover, CLion, Goland, PyCharm, WebStorm, AppCode
 - **macOS**: Xcode, Swift Package Manager
 - **Other**: Eclipse, Visual Studio for Mac, general git repositories
+- **Suggest more!**
 
 ## Contributing
 
-Contributions welcome! Areas for improvement:
+Contributions welcome! This project was just born and is still being sketched out:
 
 - **New project type cleanup recipes**: PRs adding support for new language ecosystems (Haskell, Elixir, Julia, etc.)
 - **Platform support**: Windows cleanup strategies, additional macOS IDE detection
-- **Feature suggestions**: Better reporting, export formats, scheduling/automation (carefully!)
 - **Bug reports**: IDE detection edge cases, false positives in discovery
 
 Open an issue or PR to discuss ideas before major changes.
