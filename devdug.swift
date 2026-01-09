@@ -763,13 +763,24 @@ func printCleanupStrategy(_ projects: [ProjectInfo], verbose: Bool = false) {
         for project in topProjects {
             let emoji = projectEmoji(project.type)
             let sizeStr = formatBytes(project.size)
-            print("  \(emoji) \(project.name): \(sizeStr)")
+            print("  \(emoji) \(project.name) (\(project.type)): \(sizeStr)")
         }
     }
     
     print("\n\(ANSI.yellow)Yellow actions (⚠️  tentative) require manual verification.\(ANSI.reset)")
     print("\(ANSI.red)Red paths will be permanently deleted.\(ANSI.reset)")
-    print("\(ANSI.green)Green commands are safe to run.\(ANSI.reset)\n")
+    print("\(ANSI.green)Green commands are safe to run.\(ANSI.reset)")
+    
+    // Show emoji legend for types used
+    let usedTypes = Set(projects.map { $0.type }).sorted()
+    if !usedTypes.isEmpty {
+        print("\n\(ANSI.dim)Emoji legend:\(ANSI.reset)")
+        for type in usedTypes {
+            let emoji = projectEmoji(type)
+            print("  \(emoji) \(type)")
+        }
+    }
+    print()
 }
 
 func requestConfirmation(_ message: String, confirmationNumber: Int = 1) -> Bool {
