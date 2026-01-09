@@ -180,7 +180,7 @@ func getInstalledIDEs() -> Set<String> {
     // Check for IDEs in /Applications
     let appPaths = [
         "/Applications/Xcode.app": "xcode",
-        "/Applications/IntelliJ IDEA.app": "intellij",
+        "/Applications/IntelliJ IDEA.app": "intellij-idea",
         "/Applications/RustRover.app": "rustrover",
         "/Applications/CLion.app": "clion",
         "/Applications/GoLand.app": "goland",
@@ -188,12 +188,40 @@ func getInstalledIDEs() -> Set<String> {
         "/Applications/WebStorm.app": "webstorm",
         "/Applications/AppCode.app": "appcode",
         "/Applications/Android Studio.app": "android-studio",
-        "/Applications/Eclipse.app": "eclipse",
+        "/Applications/Visual Studio.app": "visual-studio",
+    ]
+    
+    // Eclipse and other IDEs often installed outside /Applications
+    let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+    let altPaths = [
+        "/opt/eclipse/Eclipse.app": "eclipse",
+        "/opt/eclipse": "eclipse",
     ]
     
     for (path, name) in appPaths {
         if fm.fileExists(atPath: path) {
             installed.insert(name)
+        }
+    }
+    
+    for (path, name) in altPaths {
+        if fm.fileExists(atPath: path) {
+            installed.insert(name)
+        }
+    }
+    
+    // Eclipse in ~/eclipse - check for any versioned subdirectory with Eclipse.app
+    // (Eclipse updates install in versioned dirs like java-2024-09, java-2025-12, etc)
+    let eclipseBaseDir = "\(homeDir)/eclipse"
+    if fm.fileExists(atPath: eclipseBaseDir) {
+        if let contents = try? fm.contentsOfDirectory(atPath: eclipseBaseDir) {
+            for subdir in contents {
+                let appPath = "\(eclipseBaseDir)/\(subdir)/Eclipse.app"
+                if fm.fileExists(atPath: appPath) {
+                    installed.insert("eclipse")
+                    break
+                }
+            }
         }
     }
     
@@ -206,7 +234,7 @@ func getStandardIDELocations() -> [(path: String, ide: String)] {
     
     let ideMap: [(path: String, ide: String)] = [
         // IntelliJ variants
-        ("\(homeDir)/IdeaProjects", "idea"),
+        ("\(homeDir)/IdeaProjects", "intellij-idea"),
         ("\(homeDir)/RustroverProjects", "rustrover"),
         ("\(homeDir)/CLionProjects", "clion"),
         ("\(homeDir)/GolandProjects", "goland"),
@@ -220,6 +248,9 @@ func getStandardIDELocations() -> [(path: String, ide: String)] {
         // Eclipse
         ("\(homeDir)/eclipse-workspace", "eclipse"),
         ("\(homeDir)/eclipse", "eclipse"),
+        
+        // Visual Studio for Mac
+        ("\(homeDir)/Projects", "visual-studio"),
         
         // Xcode (no centralized location, but check common spots)
         ("\(homeDir)/Library/Developer/Xcode/DerivedData", "xcode"),
@@ -344,7 +375,7 @@ func detectProjectType(_ path: String) -> String? {
         return "xcode-workspace"
     }
     if fm.fileExists(atPath: "\(path)/.idea") {
-        return "intellij"
+        return "intellij-idea"
     }
     
     // Language-specific package managers & config
@@ -578,12 +609,12 @@ let ui = config.verbose ? TerminalUI() : nil
 ui?.setup()
 
 if config.verbose {
-    ui?.printMessage("🔍 Checking for installed IDEs...\n") ?? print("🔍 Checking for installed IDEs...\n")
+    ui?.printMessage("🔍 Checking for IDE installations in /Applications...\n") ?? print("🔍 Checking for IDE installations in /Applications...\n")
     let installed = getInstalledIDEs()
     if installed.isEmpty {
-        ui?.printMessage("No IDEs detected (but this is OK - scanning all standard locations)\n") ?? print("No IDEs detected (but this is OK - scanning all standard locations)\n")
+        ui?.printMessage("No IDE applications found (scanning all standard project locations anyway)\n") ?? print("No IDE applications found (scanning all standard project locations anyway)\n")
     } else {
-        ui?.printMessage("Detected: \(installed.sorted().joined(separator: ", "))\n") ?? print("Detected: \(installed.sorted().joined(separator: ", "))\n")
+        ui?.printMessage("IDE apps found: \(installed.sorted().joined(separator: ", "))\n") ?? print("IDE apps found: \(installed.sorted().joined(separator: ", "))\n")
     }
 }
 
