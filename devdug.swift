@@ -11,6 +11,7 @@ struct ANSI {
     static let cyan = "\u{1B}[36m"
     static let green = "\u{1B}[32m"
     static let yellow = "\u{1B}[33m"
+    static let red = "\u{1B}[31m"
     
     // Cursor control
     static let saveCursor = "\u{1B}[s"
@@ -86,6 +87,31 @@ struct ProjectInfo {
     let type: String // "xcode", "intellij", "android-studio", "eclipse", "npm", "cargo", etc.
     let size: UInt64 // in bytes
     let lastModified: Date
+}
+
+struct CleanupAction {
+    let type: ActionType
+    let description: String
+    let estimatedSize: UInt64? // nil if unknown
+    
+    enum ActionType {
+        case safeCommand      // green: cargo clean, npm ci, etc.
+        case tentativeCommand // yellow: make clean (uncertain)
+        case pathDelete       // red: target/, node_modules/, *.o
+    }
+    
+    func colorize() -> String {
+        let colorCode: String
+        switch type {
+        case .safeCommand:
+            colorCode = ANSI.green
+        case .tentativeCommand:
+            colorCode = ANSI.yellow
+        case .pathDelete:
+            colorCode = ANSI.red
+        }
+        return "\(colorCode)\(description)\(ANSI.reset)"
+    }
 }
 
 // MARK: - Argument Parser
@@ -362,6 +388,71 @@ func scanHomeDirectoryForProjects(verbose: Bool = false, ui: TerminalUI? = nil) 
     
     scanLevel(homeDir, depth: 1)
     return projects
+}
+
+func getCleanupActions(for projectType: String, at projectPath: String) -> [CleanupAction] {
+    let fm = FileManager.default
+    var actions: [CleanupAction] = []
+    
+    switch projectType {
+    case "cargo":
+        actions.append(CleanupAction(type: .safeCommand, description: "cargo clean", estimatedSize: nil))
+        actions.append(CleanupAction(type: .pathDelete, description: "target/", estimatedSize: nil))
+        
+    case "npm":
+        actions.append(CleanupAction(type: .safeCommand, description: "npm ci --prefer-offline", estimatedSize: nil))
+        actions.append(CleanupAction(type: .pathDelete, description: "node_modules/", estimatedSize: nil))
+        
+    case "gradle":
+        actions.append(CleanupAction(type: .safeCommand, description: "./gradlew clean", estimatedSize: nil))
+        actions.append(CleanupAction(type: .pathDelete, description: "build/", estimatedSize: nil))
+        
+    case "swift-spm":
+        actions.append(CleanupAction(type: .pathDelete, description: ".build/", estimatedSize: nil))
+        
+    case "python-pip", "python-poetry", "python-setuptools":
+        actions.append(CleanupAction(type: .pathDelete, description: "__pycache__/", estimatedSize: nil))
+        actions.append(CleanupAction(type: .pathDelete, description: "dist/", estimatedSize: nil))
+        actions.append(CleanupAction(type: .pathDelete, description: "build/", estimatedSize: nil))
+        actions.append(CleanupAction(type: .pathDelete, description: "*.egg-info/", estimatedSize: nil))
+        
+    case "make":
+        let makefilePath = "\(projectPath)/Makefile"
+        if fm.fileExists(atPath: makefilePath) {
+            actions.append(CleanupAction(type: .tentativeCommand, description: "make clean (if target exists)", estimatedSize: nil))
+        }
+        actions.append(CleanupAction(type: .pathDelete, description: "build/", estimatedSize: nil))
+        
+    case "cmake":
+        actions.append(CleanupAction(type: .tentativeCommand, description: "make clean (if CMakeLists.txt)", estimatedSize: nil))
+        actions.append(CleanupAction(type: .pathDelete, description: "cmake-build-debug/", estimatedSize: nil))
+        actions.append(CleanupAction(type: .pathDelete, description: "cmake-build-release/", estimatedSize: nil))
+        
+    case "intellij-idea":
+        actions.append(CleanupAction(type: .pathDelete, description: ".idea/cache/", estimatedSize: nil))
+        actions.append(CleanupAction(type: .pathDelete, description: ".idea/caches/", estimatedSize: nil))
+        actions.append(CleanupAction(type: .pathDelete, description: ".idea/shelf/", estimatedSize: nil))
+        
+    case "eclipse-workspace":
+        actions.append(CleanupAction(type: .pathDelete, description: ".recommenders/", estimatedSize: nil))
+        
+    case "xcode":
+        actions.append(CleanupAction(type: .pathDelete, description: "~/Library/Developer/Xcode/DerivedData/<ProjectName>-*/", estimatedSize: nil))
+        
+    case "go":
+        if fm.fileExists(atPath: "\(projectPath)/vendor") {
+            actions.append(CleanupAction(type: .tentativeCommand, description: "rm -rf vendor/", estimatedSize: nil))
+        }
+        
+    case "git-repo":
+        actions.append(CleanupAction(type: .safeCommand, description: "git gc --aggressive (optimize, don't delete)", estimatedSize: nil))
+        
+    default:
+        // No known cleanup
+        break
+    }
+    
+    return actions
 }
 
 func detectProjectType(_ path: String) -> String? {
