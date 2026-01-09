@@ -774,10 +774,38 @@ func printCleanupStrategy(_ projects: [ProjectInfo], verbose: Bool = false) {
     // Show emoji legend for types used
     let usedTypes = Set(projects.map { $0.type }).sorted()
     if !usedTypes.isEmpty {
-        print("\n\(ANSI.dim)Emoji legend:\(ANSI.reset)")
-        for type in usedTypes {
+        print()
+        let legendItems = usedTypes.map { type -> String in
             let emoji = projectEmoji(type)
-            print("  \(emoji) \(type)")
+            return "\(emoji) \(type)"
+        }
+        
+        var currentLine = ""
+        var lines: [String] = []
+        let terminalWidth = 80 // conservative estimate
+        let padding = 2
+        
+        for item in legendItems {
+            let testLine = currentLine.isEmpty ? item : currentLine + "  " + item
+            // Emojis display as 2 chars but Swift counts them as 1, so add 1 per emoji
+            let emojiCount = testLine.filter { String($0).rangeOfCharacter(from: .symbols) != nil }.count
+            let displayWidth = testLine.count + emojiCount + padding
+            
+            if displayWidth <= terminalWidth {
+                currentLine = testLine
+            } else {
+                if !currentLine.isEmpty {
+                    lines.append(currentLine)
+                }
+                currentLine = item
+            }
+        }
+        if !currentLine.isEmpty {
+            lines.append(currentLine)
+        }
+        
+        for line in lines {
+            print("\(ANSI.dim)\(line)\(ANSI.reset)")
         }
     }
     print()
