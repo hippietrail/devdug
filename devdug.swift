@@ -2,6 +2,73 @@
 
 import Foundation
 
+// MARK: - ANSI Terminal Control
+
+struct ANSI {
+    static let reset = "\u{1B}[0m"
+    static let bold = "\u{1B}[1m"
+    static let dim = "\u{1B}[2m"
+    static let cyan = "\u{1B}[36m"
+    static let green = "\u{1B}[32m"
+    static let yellow = "\u{1B}[33m"
+    
+    // Cursor control
+    static let saveCursor = "\u{1B}[s"
+    static let restoreCursor = "\u{1B}[u"
+    static func moveTo(row: Int, col: Int) -> String {
+        return "\u{1B}[\(row);\(col)H"
+    }
+    static func clearLine() -> String {
+        return "\u{1B}[K"
+    }
+    
+    // Scroll regions
+    static func setScrollRegion(top: Int, bottom: Int) -> String {
+        return "\u{1B}[\(top);\(bottom)r"
+    }
+    static let resetScrollRegion = "\u{1B}[r"
+}
+
+class TerminalUI {
+    private let maxRows: Int
+    private let statusRow: Int
+    private var isSetup = false
+    
+    init(maxRows: Int = 24) {
+        self.maxRows = maxRows
+        self.statusRow = maxRows  // Last line is status
+    }
+    
+    func setup() {
+        print(ANSI.saveCursor, terminator: "")
+        print(ANSI.setScrollRegion(top: 1, bottom: statusRow - 1), terminator: "")
+        fflush(stdout)
+        isSetup = true
+    }
+    
+    func cleanup() {
+        if isSetup {
+            print(ANSI.resetScrollRegion, terminator: "")
+            print(ANSI.restoreCursor, terminator: "")
+            fflush(stdout)
+            isSetup = false
+        }
+    }
+    
+    func updateStatus(_ message: String) {
+        print(ANSI.saveCursor, terminator: "")
+        print(ANSI.moveTo(row: statusRow, col: 1), terminator: "")
+        print("\(ANSI.dim)⧏ \(message)\(ANSI.clearLine())\(ANSI.reset)", terminator: "")
+        print(ANSI.restoreCursor, terminator: "")
+        fflush(stdout)
+    }
+    
+    func printMessage(_ message: String) {
+        print(message)
+        fflush(stdout)
+    }
+}
+
 // MARK: - Configuration & Types
 
 struct Config {
@@ -193,7 +260,7 @@ func getIDECacheLocations() -> [String] {
     ]
 }
 
-func scanHomeDirectoryForProjects(verbose: Bool = false) -> [ProjectInfo] {
+func scanHomeDirectoryForProjects(verbose: Bool = false, ui: TerminalUI? = nil) -> [ProjectInfo] {
     let fm = FileManager.default
     let homeDir = fm.homeDirectoryForCurrentUser.path
     var projects: [ProjectInfo] = []
@@ -260,17 +327,23 @@ func scanHomeDirectoryForProjects(verbose: Bool = false) -> [ProjectInfo] {
             ))
             
             if verbose {
-                print("✓ Found \(dirName) (\(type)) in ~")
+                let msg = "✓ Found \(dirName) (\(type)) in ~"
+                ui?.printMessage(msg) ?? print(msg)
+            }
+            
+            // Update status bar
+            if let ui = ui {
+                ui.updateStatus("Found \(projects.count) projects in home...")
             }
             
             // Don't descend into projects we found
             enumerator.skipDescendants()
         }
         // If no project found, continue descending (could be a workspace dir)
-    }
-    
-    return projects
-}
+        }
+        
+        return projects
+        }
 
 func detectProjectType(_ path: String) -> String? {
     let fm = FileManager.default
@@ -415,7 +488,7 @@ func resolveAliasOrSymlink(_ path: String) -> String {
     return path
 }
 
-func discoverProjects(in locations: [(path: String, ide: String)], verbose: Bool = false) -> [ProjectInfo] {
+func discoverProjects(in locations: [(path: String, ide: String)], verbose: Bool = false, ui: TerminalUI? = nil) -> [ProjectInfo] {
     let fm = FileManager.default
     var projects: [ProjectInfo] = []
     
@@ -427,7 +500,7 @@ func discoverProjects(in locations: [(path: String, ide: String)], verbose: Bool
         guard fm.fileExists(atPath: resolvedPath, isDirectory: &isDir),
               isDir.boolValue else {
             if verbose {
-                print("⊘ \(location) (not a directory)")
+                ui?.printMessage("⊘ \(location) (not a directory)") ?? print("⊘ \(location) (not a directory)")
             }
             continue
         }
@@ -463,13 +536,19 @@ func discoverProjects(in locations: [(path: String, ide: String)], verbose: Bool
                     ))
                     
                     if verbose {
-                        print("✓ Found \(item) (\(type)) in \(ide)")
+                        let msg = "✓ Found \(item) (\(type)) in \(ide)"
+                        ui?.printMessage(msg) ?? print(msg)
+                    }
+                    
+                    // Update status bar
+                    if let ui = ui {
+                        ui.updateStatus("Found \(projects.count) projects...")
                     }
                 }
             }
         } catch {
             if verbose {
-                print("✗ Error scanning \(location): \(error)")
+                ui?.printMessage("✗ Error scanning \(location): \(error)") ?? print("✗ Error scanning \(location): \(error)")
             }
         }
     }
@@ -516,24 +595,30 @@ func requestConfirmation(_ message: String, confirmationNumber: Int = 1) -> Bool
 
 let config = parseArgs(CommandLine.arguments)
 
+// Set up terminal UI if verbose (before any printing)
+let ui = config.verbose ? TerminalUI() : nil
+ui?.setup()
+
 if config.verbose {
-    print("🔍 Checking for installed IDEs...\n")
+    ui?.printMessage("🔍 Checking for installed IDEs...\n") ?? print("🔍 Checking for installed IDEs...\n")
     let installed = getInstalledIDEs()
     if installed.isEmpty {
-        print("No IDEs detected (but this is OK - scanning all standard locations)\n")
+        ui?.printMessage("No IDEs detected (but this is OK - scanning all standard locations)\n") ?? print("No IDEs detected (but this is OK - scanning all standard locations)\n")
     } else {
-        print("Detected: \(installed.sorted().joined(separator: ", "))\n")
+        ui?.printMessage("Detected: \(installed.sorted().joined(separator: ", "))\n") ?? print("Detected: \(installed.sorted().joined(separator: ", "))\n")
     }
 }
 
 let locations = getStandardIDELocations()
-var projects = discoverProjects(in: locations, verbose: config.verbose)
+var projects = discoverProjects(in: locations, verbose: config.verbose, ui: ui)
 
 if config.verbose {
-    print("\n🏠 Scanning home directory for scattered projects...\n")
+    ui?.printMessage("\n🏠 Scanning home directory for scattered projects...\n") ?? print("\n🏠 Scanning home directory for scattered projects...\n")
 }
-let homeProjects = scanHomeDirectoryForProjects(verbose: config.verbose)
+let homeProjects = scanHomeDirectoryForProjects(verbose: config.verbose, ui: ui)
 projects.append(contentsOf: homeProjects)
+
+ui?.cleanup()
 
 // Remove duplicates (by path)
 projects = Array(Set(projects.map { $0.path })).compactMap { path in
