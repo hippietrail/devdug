@@ -198,20 +198,27 @@ func scanHomeDirectoryForProjects(verbose: Bool = false) -> [ProjectInfo] {
     let homeDir = fm.homeDirectoryForCurrentUser.path
     var projects: [ProjectInfo] = []
     
-    // Directories to skip (common non-project dirs)
+    // Directories to skip entirely (common non-project dirs)
     let skipDirs = Set([
         ".Trash", ".cache", ".local", ".config", ".ssh", ".vim",
         "Library", "Applications", "Desktop", "Downloads", "Documents",
-        "node_modules", ".git", ".gradle", ".cargo", "__pycache__",
-        "venv", "env", ".venv", ".env", "build", "dist", "target"
+        ".git", ".gradle", ".cargo", "__pycache__",
+        "venv", "env", ".venv", ".env", ".npm"
+    ])
+    
+    // Directories that indicate we should stop descending (build artifacts, dependencies)
+    let stopDescendingDirs = Set([
+        "node_modules", "build", "dist", "target", ".build",
+        "DerivedData", "xcarchive"
     ])
     
     guard let enumerator = fm.enumerator(atPath: homeDir) else { return [] }
     
     for case let item as String in enumerator {
-        // Only scan first two levels from home
         let components = item.split(separator: "/", omittingEmptySubsequences: true)
-        if components.count > 2 {
+        
+        // Go up to 3 levels deep from home
+        if components.count > 3 {
             enumerator.skipDescendants()
             continue
         }
@@ -224,9 +231,16 @@ func scanHomeDirectoryForProjects(verbose: Bool = false) -> [ProjectInfo] {
             continue
         }
         
-        // Skip known non-project directories
         let dirName = String(components.last ?? "")
+        
+        // Skip completely if in skip list or hidden
         if skipDirs.contains(dirName) || dirName.starts(with: ".") {
+            enumerator.skipDescendants()
+            continue
+        }
+        
+        // Stop descending if we hit build artifacts
+        if stopDescendingDirs.contains(dirName) {
             enumerator.skipDescendants()
             continue
         }
@@ -252,6 +266,7 @@ func scanHomeDirectoryForProjects(verbose: Bool = false) -> [ProjectInfo] {
             // Don't descend into projects we found
             enumerator.skipDescendants()
         }
+        // If no project found, continue descending (could be a workspace dir)
     }
     
     return projects
