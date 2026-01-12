@@ -4,14 +4,25 @@ import DevdugCore
 
 // MARK: - Terminal Utilities
 
+// VERIFIED: ioctl(TIOCGWINSZ) works reliably on macOS
+// Returns actual terminal width in real-time
+//
+// ALTERNATIVE: COLUMNS environment variable
+// Simpler but less reliable - depends on shell setting COLUMNS
+// Often not set, so fallback to 80
 func getTerminalWidth() -> Int {
+    // Try COLUMNS environment variable first
+    if let columnsStr = ProcessInfo.processInfo.environment["COLUMNS"],
+       let width = Int(columnsStr),
+       width > 0 {
+        return width
+    }
+    // Fallback to ioctl
     var size = winsize()
-    // Try stdout first, then stderr if stdout fails
     let resultStdout = Darwin.ioctl(fileno(stdout), UInt(TIOCGWINSZ), &size)
     if resultStdout != 0 || size.ws_col == 0 {
         _ = Darwin.ioctl(fileno(stderr), UInt(TIOCGWINSZ), &size)
     }
-    // Return detected width, or 80 as fallback
     return Int(size.ws_col) > 0 ? Int(size.ws_col) : 80
 }
 

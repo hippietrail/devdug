@@ -782,6 +782,8 @@ func printCleanupStrategy(_ projects: [ProjectInfo], verbose: Bool = false) {
         
         var currentLine = ""
         var lines: [String] = []
+        // NOTE: ioctl(TIOCGWINSZ) works reliably on macOS for getting terminal width
+        // but original version uses hardcoded 80 for simplicity
         let terminalWidth = 80 // conservative estimate
         let padding = 2
         
