@@ -784,6 +784,7 @@ func printCleanupStrategy(_ projects: [ProjectInfo], verbose: Bool = false) {
         var lines: [String] = []
         // NOTE: ioctl(TIOCGWINSZ) and COLUMNS env var both work reliably on macOS
         // Tested on iTerm2 and Terminal.app
+        // Both terminals automatically update COLUMNS env var on resize
         // But original version uses hardcoded 80 for simplicity
         let terminalWidth = 80 // conservative estimate
         let padding = 2

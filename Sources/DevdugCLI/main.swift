@@ -9,8 +9,13 @@ import DevdugCore
 // Returns actual terminal width in real-time
 //
 // ALTERNATIVE (also verified): COLUMNS environment variable
-// Works on both iTerm2 and Terminal.app when set
+// Works on both iTerm2 and Terminal.app
+// Both terminals automatically update COLUMNS env var on resize
 // Simpler but less reliable - depends on shell setting COLUMNS
+//
+// NOTE: ANSI escape sequence method exists (CSI 18 t query)
+// but requires reading/parsing terminal response - more complex
+// ioctl is simpler and more direct for our use case
 func getTerminalWidth() -> Int {
     // Primary method: ioctl(TIOCGWINSZ) - most reliable
     var size = winsize()
