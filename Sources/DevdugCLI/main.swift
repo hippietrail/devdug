@@ -367,6 +367,7 @@ projects.append(contentsOf: homeProjects)
 
 ui?.cleanup()
 
+// Dedup by path
 projects = Array(Set(projects.map { $0.path })).compactMap { path in
     projects.first { $0.path == path }
 }

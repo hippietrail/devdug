@@ -60,18 +60,22 @@ public class ProjectDiscovery {
                     let fullPath = (location as NSString).appendingPathComponent(item)
                     
                     if let projectType = detectProjectType(at: fullPath) {
-                        let attrs = try fileManager.attributesOfItem(atPath: fullPath)
-                        let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
-                        let modified = (attrs[.modificationDate] as? Date) ?? Date()
-                        
-                        let project = ProjectInfo(
-                            path: fullPath,
-                            name: item,
-                            type: projectType,
-                            size: size,
-                            lastModified: modified
-                        )
-                        projects.append(project)
+                        do {
+                            let attrs = try fileManager.attributesOfItem(atPath: fullPath)
+                            let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
+                            let modified = (attrs[.modificationDate] as? Date) ?? Date()
+                            
+                            let project = ProjectInfo(
+                                path: fullPath,
+                                name: item,
+                                type: projectType,
+                                size: size,
+                                lastModified: modified
+                            )
+                            projects.append(project)
+                        } catch {
+                            // Skip if we can't get attributes
+                        }
                     }
                 }
             } catch {
@@ -91,6 +95,7 @@ public class ProjectDiscovery {
         // Scan top-level directories looking for indicators
         do {
             let contents = try fileManager.contentsOfDirectory(atPath: home)
+            
             for item in contents {
                 guard !item.starts(with: ".") else { continue }
                 
@@ -101,22 +106,26 @@ public class ProjectDiscovery {
                 }
                 
                 if let projectType = detectProjectType(at: fullPath) {
-                    let attrs = try fileManager.attributesOfItem(atPath: fullPath)
-                    let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
-                    let modified = (attrs[.modificationDate] as? Date) ?? Date()
-                    
-                    let project = ProjectInfo(
-                        path: fullPath,
-                        name: item,
-                        type: projectType,
-                        size: size,
-                        lastModified: modified
-                    )
-                    projects.append(project)
+                    do {
+                        let attrs = try fileManager.attributesOfItem(atPath: fullPath)
+                        let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
+                        let modified = (attrs[.modificationDate] as? Date) ?? Date()
+                        
+                        let project = ProjectInfo(
+                            path: fullPath,
+                            name: item,
+                            type: projectType,
+                            size: size,
+                            lastModified: modified
+                        )
+                        projects.append(project)
+                    } catch {
+                        // Skip if we can't get attributes
+                    }
                 }
             }
         } catch {
-            // Silently skip
+            // Skip if we can't read directory
         }
         
         return projects.sorted { $0.lastModified > $1.lastModified }
@@ -172,5 +181,6 @@ public func formatBytes(_ bytes: UInt64) -> String {
         unitIndex += 1
     }
     
-    return String(format: "%.1f %s", value, units[unitIndex])
+    let formatted = String(format: "%.1f", value)
+    return "\(formatted) \(units[unitIndex])"
 }
