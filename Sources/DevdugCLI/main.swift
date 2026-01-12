@@ -298,7 +298,12 @@ func printCleanupStrategy(_ projects: [ProjectInfo], verbose: Bool = false) {
         
         var currentLine = ""
         var lines: [String] = []
-        let terminalWidth = 80
+        // TODO: Detect actual terminal width instead of hardcoding 80
+        // Options:
+        // 1. ioctl(TIOCGWINSZ) - most direct, requires Darwin import
+        // 2. COLUMNS env var - simple fallback, may not be set
+        // 3. `tput cols` - portable but spawns subprocess
+        let terminalWidth = 80  // conservative estimate
         let padding = 2
         
         for item in legendItems {
