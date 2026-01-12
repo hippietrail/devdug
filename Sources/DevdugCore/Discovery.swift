@@ -181,6 +181,10 @@ public func formatBytes(_ bytes: UInt64) -> String {
         unitIndex += 1
     }
     
+    // NOTE: Cannot use String(format: "%.1f %s", value, units[unitIndex])
+    // because %s expects const char* (C string), not a Swift String.
+    // This caused segfault when formatter tried to dereference Swift String
+    // as a C pointer. Use string interpolation instead.
     let formatted = String(format: "%.1f", value)
     return "\(formatted) \(units[unitIndex])"
 }
