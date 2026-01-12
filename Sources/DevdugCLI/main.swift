@@ -1,5 +1,19 @@
 import Foundation
+import Darwin
 import DevdugCore
+
+// MARK: - Terminal Utilities
+
+func getTerminalWidth() -> Int {
+    var size = winsize()
+    // Try stdout first, then stderr if stdout fails
+    let resultStdout = Darwin.ioctl(fileno(stdout), UInt(TIOCGWINSZ), &size)
+    if resultStdout != 0 || size.ws_col == 0 {
+        _ = Darwin.ioctl(fileno(stderr), UInt(TIOCGWINSZ), &size)
+    }
+    // Return detected width, or 80 as fallback
+    return Int(size.ws_col) > 0 ? Int(size.ws_col) : 80
+}
 
 // MARK: - ANSI Terminal Control
 
@@ -298,12 +312,7 @@ func printCleanupStrategy(_ projects: [ProjectInfo], verbose: Bool = false) {
         
         var currentLine = ""
         var lines: [String] = []
-        // TODO: Detect actual terminal width instead of hardcoding 80
-        // Options:
-        // 1. ioctl(TIOCGWINSZ) - most direct, requires Darwin import
-        // 2. COLUMNS env var - simple fallback, may not be set
-        // 3. `tput cols` - portable but spawns subprocess
-        let terminalWidth = 80  // conservative estimate
+        let terminalWidth = getTerminalWidth()
         let padding = 2
         
         for item in legendItems {
