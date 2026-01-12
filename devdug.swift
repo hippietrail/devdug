@@ -1,6 +1,18 @@
 #!/usr/bin/swift
 
 import Foundation
+import Darwin
+
+// MARK: - Terminal Utilities
+
+// Get terminal width using ioctl(TIOCGWINSZ)
+// Alternatives exist: COLUMNS env var, ANSI escape sequences
+// But ioctl is most direct and reliable on macOS
+func getTerminalWidth() -> Int {
+    var size = winsize()
+    Darwin.ioctl(fileno(stdout), UInt(TIOCGWINSZ), &size)
+    return Int(size.ws_col)
+}
 
 // MARK: - ANSI Terminal Control
 
@@ -782,11 +794,7 @@ func printCleanupStrategy(_ projects: [ProjectInfo], verbose: Bool = false) {
         
         var currentLine = ""
         var lines: [String] = []
-        // NOTE: ioctl(TIOCGWINSZ) and COLUMNS env var both work reliably on macOS
-        // Tested on iTerm2 and Terminal.app
-        // Both terminals automatically update COLUMNS env var on resize
-        // But original version uses hardcoded 80 for simplicity
-        let terminalWidth = 80 // conservative estimate
+        let terminalWidth = getTerminalWidth()
         let padding = 2
         
         for item in legendItems {
