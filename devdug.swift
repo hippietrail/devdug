@@ -10,7 +10,7 @@ import Darwin
 // But ioctl is most direct and reliable on macOS
 func getTerminalWidth() -> Int {
     var size = winsize()
-    Darwin.ioctl(fileno(stdout), UInt(TIOCGWINSZ), &size)
+    _ = Darwin.ioctl(fileno(stdout), UInt(TIOCGWINSZ), &size)
     return Int(size.ws_col)
 }
 
