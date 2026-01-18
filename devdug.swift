@@ -53,12 +53,25 @@ class TerminalUI {
     }
     
     func buildStatusLine() -> String {
-        let counts = projectCounts
+        var aggregatedCounts: [String: Int] = [:]
+        
+        // JetBrains IDE products that should be grouped under "intellij-platform"
+        let jetbrainsIDEs = Set(["intellij-idea", "android-studio", "rustrover", "clion", "goland", "pycharm", "webstorm", "appcode"])
+        
+        for (type, count) in projectCounts {
+            if jetbrainsIDEs.contains(type) {
+                aggregatedCounts["intellij-platform", default: 0] += count
+            } else {
+                aggregatedCounts[type, default: 0] += count
+            }
+        }
+        
+        let counts = aggregatedCounts
             .sorted { $0.key < $1.key }
             .map { "\($0.key): \($0.value)" }
             .joined(separator: " | ")
         
-        let totalProjects = projectCounts.values.reduce(0, +)
+        let totalProjects = aggregatedCounts.values.reduce(0, +)
         return "Total: \(totalProjects) | \(counts)"
     }
     
