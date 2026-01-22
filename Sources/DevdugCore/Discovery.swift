@@ -65,12 +65,17 @@ public class ProjectDiscovery {
                             let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
                             let modified = (attrs[.modificationDate] as? Date) ?? Date()
                             
+                            let (isGit, host, originURL) = detectGit(at: fullPath)
+                            
                             let project = ProjectInfo(
                                 path: fullPath,
                                 name: item,
                                 type: projectType,
                                 size: size,
-                                lastModified: modified
+                                lastModified: modified,
+                                isGitRepo: isGit,
+                                gitHost: host,
+                                gitOriginURL: originURL
                             )
                             projects.append(project)
                         } catch {
@@ -111,12 +116,17 @@ public class ProjectDiscovery {
                         let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
                         let modified = (attrs[.modificationDate] as? Date) ?? Date()
                         
+                        let (isGit, host, originURL) = detectGit(at: fullPath)
+                        
                         let project = ProjectInfo(
                             path: fullPath,
                             name: item,
                             type: projectType,
                             size: size,
-                            lastModified: modified
+                            lastModified: modified,
+                            isGitRepo: isGit,
+                            gitHost: host,
+                            gitOriginURL: originURL
                         )
                         projects.append(project)
                     } catch {
@@ -129,6 +139,93 @@ public class ProjectDiscovery {
         }
         
         return projects.sorted { $0.lastModified > $1.lastModified }
+    }
+
+    // MARK: - Git Detection
+
+    public func detectGit(at path: String) -> (isGitRepo: Bool, host: GitHost, originURL: String?) {
+        let gitPath = (path as NSString).appendingPathComponent(".git")
+        
+        guard fileManager.fileExists(atPath: gitPath) else {
+            return (false, .unknown, nil)
+        }
+        
+        let originURL = parseGitOrigin(at: path)
+        let host = detectGitHost(from: originURL)
+        
+        return (true, host, originURL)
+    }
+
+    private func parseGitOrigin(at path: String) -> String? {
+        let configPath = (path as NSString).appendingPathComponent(".git/config")
+        
+        guard fileManager.fileExists(atPath: configPath),
+              let content = try? String(contentsOfFile: configPath, encoding: .utf8) else {
+            return nil
+        }
+        
+        // Parse git config for [remote "origin"] url = ...
+        var inRemoteSection = false
+        for line in content.split(separator: "\n", omittingEmptySubsequences: false) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            
+            if trimmed == "[remote \"origin\"]" {
+                inRemoteSection = true
+                continue
+            }
+            
+            if trimmed.starts(with: "[") && inRemoteSection {
+                // Entered different section
+                break
+            }
+            
+            if inRemoteSection && trimmed.starts(with: "url =") {
+                let urlPart = trimmed.dropFirst("url =".count).trimmingCharacters(in: .whitespaces)
+                return String(urlPart)
+            }
+        }
+        
+        return nil
+    }
+
+    private func detectGitHost(from url: String?) -> GitHost {
+        guard let url = url else { return .unknown }
+        
+        let lowerURL = url.lowercased()
+        
+        if lowerURL.contains("github.com") {
+            return .github
+        } else if lowerURL.contains("gitlab.com") {
+            return .gitlab
+        } else if lowerURL.contains("codeberg.org") {
+            return .codeberg
+        } else if lowerURL.contains("gitea") {
+            return .gitea
+        } else if let hostname = extractHostname(from: url) {
+            return .custom(hostname: hostname)
+        }
+        
+        return .unknown
+    }
+
+    private func extractHostname(from url: String) -> String? {
+        // Handle both https://hostname/path and git@hostname:path formats
+        if let atIndex = url.firstIndex(of: "@") {
+            // git@hostname:path format
+            let afterAt = url[url.index(after: atIndex)...]
+            if let colonIndex = afterAt.firstIndex(of: ":") {
+                return String(afterAt[..<colonIndex])
+            }
+        } else if url.contains("://") {
+            // https://hostname/path format
+            if let schemeEndIndex = url.range(of: "://")?.upperBound {
+                let afterScheme = url[schemeEndIndex...]
+                if let slashIndex = afterScheme.firstIndex(of: "/") {
+                    return String(afterScheme[..<slashIndex])
+                }
+            }
+        }
+        return nil
     }
 
     // MARK: - Project Type Detection

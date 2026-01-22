@@ -16,19 +16,65 @@ public struct Config {
     }
 }
 
+public enum GitHost: Hashable, Equatable {
+    case github
+    case gitlab
+    case codeberg
+    case gitea
+    case custom(hostname: String)
+    case unknown
+    
+    public var displayName: String {
+        switch self {
+        case .github: return "GitHub"
+        case .gitlab: return "GitLab"
+        case .codeberg: return "Codeberg"
+        case .gitea: return "Gitea"
+        case .custom(let hostname): return hostname
+        case .unknown: return "Git"
+        }
+    }
+    
+    public var icon: String {
+        switch self {
+        case .github: return "🐙"
+        case .gitlab: return "🦊"
+        case .codeberg: return "🦆"
+        case .gitea: return "🍵"
+        case .custom: return "📦"
+        case .unknown: return "🔗"
+        }
+    }
+}
+
 public struct ProjectInfo: Hashable {
     public let path: String
     public let name: String
     public let type: String
     public let size: UInt64
     public let lastModified: Date
+    public let isGitRepo: Bool
+    public let gitHost: GitHost
+    public let gitOriginURL: String?
 
-    public init(path: String, name: String, type: String, size: UInt64, lastModified: Date) {
+    public init(
+        path: String,
+        name: String,
+        type: String,
+        size: UInt64,
+        lastModified: Date,
+        isGitRepo: Bool = false,
+        gitHost: GitHost = .unknown,
+        gitOriginURL: String? = nil
+    ) {
         self.path = path
         self.name = name
         self.type = type
         self.size = size
         self.lastModified = lastModified
+        self.isGitRepo = isGitRepo
+        self.gitHost = gitHost
+        self.gitOriginURL = gitOriginURL
     }
 }
 
