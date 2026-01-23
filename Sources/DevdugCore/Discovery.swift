@@ -233,8 +233,17 @@ public class ProjectDiscovery {
     private func detectProjectType(at path: String) -> String? {
         let fileManager = FileManager.default
         
+        // Check for specific multi-type projects first
+        let tauriPath = (path as NSString).appendingPathComponent("src-tauri/tauri.conf.json")
+        if fileManager.fileExists(atPath: tauriPath) {
+            // Mark as tauri to distinguish from standalone cargo/npm projects
+            // We'll add cargo and npm to the type list below
+        }
+        
         // Check for various project markers
+        // Some projects can have multiple types (e.g., Tauri has both cargo and npm)
         let indicators: [(String, String)] = [
+            ("src-tauri/tauri.conf.json", "tauri"),  // Tauri framework project
             ("Cargo.toml", "cargo"),
             ("package.json", "npm"),
             ("pyproject.toml", "python-poetry"),
@@ -255,14 +264,32 @@ public class ProjectDiscovery {
             (".git", "git-repo"),
         ]
         
+        // Detect all applicable project types
+        var detectedTypes: [String] = []
         for (marker, type) in indicators {
             let markerPath = (path as NSString).appendingPathComponent(marker)
             if fileManager.fileExists(atPath: markerPath) {
-                return type
+                // Avoid duplicates (e.g., xcode can match both .xcodeproj and .xcworkspace)
+                if !detectedTypes.contains(type) {
+                    detectedTypes.append(type)
+                }
             }
         }
         
-        return nil
+        // Return comma-separated list of types (primary type first)
+        // Primary type determination: preferred types in order of priority
+        // Multi-type projects (like tauri) appear first, followed by primary language/framework
+        let typeOrder = ["tauri", "cargo", "npm", "go", "python-poetry", "python-pip", "xcode", 
+                        "swift-spm", "gradle", "maven", "cmake", "make", "zig",
+                        "intellij-idea", "git-repo"]
+        
+        let sorted = detectedTypes.sorted { type1, type2 in
+            let idx1 = typeOrder.firstIndex(of: type1) ?? typeOrder.count
+            let idx2 = typeOrder.firstIndex(of: type2) ?? typeOrder.count
+            return idx1 < idx2
+        }
+        
+        return sorted.isEmpty ? nil : sorted.joined(separator: ", ")
     }
 }
 

@@ -194,7 +194,24 @@ func printHelp() {
 func getCleanupActions(for projectType: String, at projectPath: String) -> [CleanupAction] {
     var actions: [CleanupAction] = []
     
+    // Handle comma-separated types (e.g., "tauri, cargo, npm")
+    let types = projectType.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+    
+    // Process each type to collect all applicable cleanup actions
+    for type in types {
+        addCleanupActionsForType(type, to: &actions)
+    }
+    
+    return actions
+}
+
+private func addCleanupActionsForType(_ projectType: String, to actions: inout [CleanupAction]) {
     switch projectType {
+    case "tauri":
+        // Tauri projects have both Rust (cargo) and Node (npm) components
+        // Add tauri-specific cleanup
+        break  // Tauri cleanup is handled by cargo and npm sections
+        
     case "cargo":
         actions.append(CleanupAction(type: .safeCommand, description: "cargo clean", explanation: "Removes compiled artifacts (target/). Safe to run anytime - rebuilds from source on next build.", estimatedSize: nil))
         actions.append(CleanupAction(type: .pathDelete, description: "target/", explanation: "Build output, compiled binaries, dependencies (typically 200MB-1GB per project)", estimatedSize: nil))
@@ -238,14 +255,12 @@ func getCleanupActions(for projectType: String, at projectPath: String) -> [Clea
         actions.append(CleanupAction(type: .tentativeCommand, description: "make clean", explanation: "Run make clean if defined. If not defined, may have no effect.", estimatedSize: nil))
         
     case "git-repo":
-        actions.append(CleanupAction(type: .tentativeCommand, description: "git gc", explanation: "Garbage collect git objects. Safe but might take time.", estimatedSize: nil))
-        
-    default:
-        actions.append(CleanupAction(type: .tentativeCommand, description: "Manual review needed", explanation: "Unknown project type. Review before deleting.", estimatedSize: nil))
-    }
-    
-    return actions
-}
+         actions.append(CleanupAction(type: .tentativeCommand, description: "git gc", explanation: "Garbage collect git objects. Safe but might take time.", estimatedSize: nil))
+         
+     default:
+         break  // Unknown type, skip
+     }
+ }
 
 // MARK: - Display Functions
 

@@ -103,6 +103,7 @@ public struct CleanupAction {
 // MARK: - Project Emoji Map
 
 public let projectEmojis: [String: String] = [
+    "tauri": "🚀",
     "cargo": "🦀",
     "npm": "📦",
     "python-pip": "🐍",
@@ -131,5 +132,8 @@ public let projectEmojis: [String: String] = [
 ]
 
 public func projectEmoji(_ type: String) -> String {
-    return projectEmojis[type] ?? "📦"
+    // Extract primary type (first one if comma-separated)
+    let primaryType = type.split(separator: ",").first.map(String.init) ?? type
+    let trimmed = primaryType.trimmingCharacters(in: .whitespaces)
+    return projectEmojis[trimmed] ?? "📦"
 }
