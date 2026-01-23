@@ -110,6 +110,7 @@ func parseArgs(_ args: [String]) -> Config {
     var listOnly = false
     var verbose = false
     var confirmations = 0
+    var useBlocks = false
     
     for arg in args.dropFirst() {
         switch arg {
@@ -123,6 +124,8 @@ func parseArgs(_ args: [String]) -> Config {
             confirmations += 1
         case "--force":
             confirmations = 2
+        case "--blocks":
+            useBlocks = true
         case "--help", "-h":
             printHelp()
             exit(0)
@@ -157,7 +160,8 @@ func parseArgs(_ args: [String]) -> Config {
         dryRun: dryRun,
         listOnly: listOnly,
         verbose: verbose,
-        confirmationCount: confirmations
+        confirmationCount: confirmations,
+        useBlocks: useBlocks
     )
 }
 
@@ -171,6 +175,7 @@ func printHelp() {
     OPTIONS:
         --list              List all discovered projects (default behavior)
         --clean             Enable cleanup mode (requires confirmations)
+        --blocks            Show actual disk usage (du -sk) instead of raw file sizes
         --yes, -y           Add confirmation (use twice: -yy for double-confirm)
         --force             Skip confirmations (dangerous!)
         -v, --verbose       Verbose output
@@ -221,6 +226,10 @@ func getCleanupActions(for projectType: String, at projectPath: String) -> [Clea
         actions.append(CleanupAction(type: .pathDelete, description: "build/", explanation: "Android build outputs.", estimatedSize: nil))
         actions.append(CleanupAction(type: .pathDelete, description: ".idea/", explanation: "IDE caches (recreated on next open).", estimatedSize: nil))
         actions.append(CleanupAction(type: .pathDelete, description: ".gradle/", explanation: "Gradle cache for this project.", estimatedSize: nil))
+        
+    case "zig":
+        actions.append(CleanupAction(type: .pathDelete, description: ".zig-cache/", explanation: "Zig build cache and compilation artifacts. Regenerated on next build.", estimatedSize: nil))
+        actions.append(CleanupAction(type: .pathDelete, description: "zig-out/", explanation: "Zig build output directory. Regenerated on next build.", estimatedSize: nil))
         
     case "cmake":
         actions.append(CleanupAction(type: .tentativeCommand, description: "rm -rf build/", explanation: "CMake build directory. Will be recreated by cmake --build (if you save your cmake cache).", estimatedSize: nil))
@@ -392,12 +401,12 @@ if config.verbose {
 }
 
 let locations = discovery.getStandardIDELocations()
-var projects = discovery.discoverProjects(in: locations)
+var projects = discovery.discoverProjects(in: locations, useBlocks: config.useBlocks)
 
 if config.verbose {
     ui?.printMessage("\n🏠 Scanning home directory for scattered projects...\n") ?? print("\n🏠 Scanning home directory for scattered projects...\n")
 }
-let homeProjects = discovery.scanHomeDirectory()
+let homeProjects = discovery.scanHomeDirectory(useBlocks: config.useBlocks)
 projects.append(contentsOf: homeProjects)
 
 ui?.cleanup()

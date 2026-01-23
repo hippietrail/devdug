@@ -7,16 +7,18 @@ public struct Config {
     public let listOnly: Bool
     public let verbose: Bool
     public let confirmationCount: Int
+    public let useBlocks: Bool
 
-    public init(dryRun: Bool = true, listOnly: Bool = false, verbose: Bool = false, confirmationCount: Int = 0) {
+    public init(dryRun: Bool = true, listOnly: Bool = false, verbose: Bool = false, confirmationCount: Int = 0, useBlocks: Bool = false) {
         self.dryRun = dryRun
         self.listOnly = listOnly
         self.verbose = verbose
         self.confirmationCount = confirmationCount
+        self.useBlocks = useBlocks
     }
 }
 
-public enum GitHost: Hashable, Equatable {
+public enum GitHost: Hashable, Equatable, Sendable {
     case github
     case gitlab
     case codeberg
@@ -47,7 +49,7 @@ public enum GitHost: Hashable, Equatable {
     }
 }
 
-public struct ProjectInfo: Hashable {
+public struct ProjectInfo: Hashable, Sendable {
     public let path: String
     public let name: String
     public let type: String

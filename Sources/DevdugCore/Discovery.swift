@@ -48,52 +48,52 @@ public class ProjectDiscovery {
 
     // MARK: - Project Discovery
 
-    public func discoverProjects(in locations: [String]) -> [ProjectInfo] {
-        var projects: [ProjectInfo] = []
-        
-        for location in locations {
-            guard fileManager.fileExists(atPath: location) else { continue }
-            
-            do {
-                let contents = try fileManager.contentsOfDirectory(atPath: location)
-                for item in contents {
-                    let fullPath = (location as NSString).appendingPathComponent(item)
-                    
-                    if let projectType = detectProjectType(at: fullPath) {
-                        do {
-                            let attrs = try fileManager.attributesOfItem(atPath: fullPath)
-                            let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
-                            let modified = (attrs[.modificationDate] as? Date) ?? Date()
-                            
-                            let (isGit, host, originURL) = detectGit(at: fullPath)
-                            
-                            let project = ProjectInfo(
-                                path: fullPath,
-                                name: item,
-                                type: projectType,
-                                size: size,
-                                lastModified: modified,
-                                isGitRepo: isGit,
-                                gitHost: host,
-                                gitOriginURL: originURL
-                            )
-                            projects.append(project)
-                        } catch {
-                            // Skip if we can't get attributes
-                        }
-                    }
-                }
-            } catch {
-                // Skip locations we can't read
-            }
-        }
-        
-        return projects.sorted { $0.lastModified > $1.lastModified }
-    }
+    public func discoverProjects(in locations: [String], useBlocks: Bool = false) -> [ProjectInfo] {
+         var projects: [ProjectInfo] = []
+         
+         for location in locations {
+             guard fileManager.fileExists(atPath: location) else { continue }
+             
+             do {
+                 let contents = try fileManager.contentsOfDirectory(atPath: location)
+                 for item in contents {
+                     let fullPath = (location as NSString).appendingPathComponent(item)
+                     
+                     if let projectType = detectProjectType(at: fullPath) {
+                         do {
+                             let size = useBlocks ? calculateBlockSize(fullPath) : calculateDirectorySize(fullPath)
+                             let attrs = try fileManager.attributesOfItem(atPath: fullPath)
+                             let modified = (attrs[.modificationDate] as? Date) ?? Date()
+                             
+                             let (isGit, host, originURL) = detectGit(at: fullPath)
+                             
+                             let project = ProjectInfo(
+                                 path: fullPath,
+                                 name: item,
+                                 type: projectType,
+                                 size: size,
+                                 lastModified: modified,
+                                 isGitRepo: isGit,
+                                 gitHost: host,
+                                 gitOriginURL: originURL
+                             )
+                             projects.append(project)
+                         } catch {
+                             // Skip if we can't get attributes
+                         }
+                     }
+                 }
+             } catch {
+                 // Skip locations we can't read
+             }
+         }
+         
+         return projects.sorted { $0.lastModified > $1.lastModified }
+     }
 
     // MARK: - Home Directory Scanning
 
-    public func scanHomeDirectory() -> [ProjectInfo] {
+    public func scanHomeDirectory(useBlocks: Bool = false) -> [ProjectInfo] {
         let home = fileManager.homeDirectoryForCurrentUser.path
         var projects: [ProjectInfo] = []
         
@@ -111,12 +111,12 @@ public class ProjectDiscovery {
                 }
                 
                 if let projectType = detectProjectType(at: fullPath) {
-                    do {
-                        let attrs = try fileManager.attributesOfItem(atPath: fullPath)
-                        let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
-                        let modified = (attrs[.modificationDate] as? Date) ?? Date()
-                        
-                        let (isGit, host, originURL) = detectGit(at: fullPath)
+                     do {
+                         let size = useBlocks ? calculateBlockSize(fullPath) : calculateDirectorySize(fullPath)
+                         let attrs = try fileManager.attributesOfItem(atPath: fullPath)
+                         let modified = (attrs[.modificationDate] as? Date) ?? Date()
+                         
+                         let (isGit, host, originURL) = detectGit(at: fullPath)
                         
                         let project = ProjectInfo(
                             path: fullPath,
@@ -284,4 +284,75 @@ public func formatBytes(_ bytes: UInt64) -> String {
     // as a C pointer. Use string interpolation instead.
     let formatted = String(format: "%.1f", value)
     return "\(formatted) \(units[unitIndex])"
+}
+
+// MARK: - Size Calculation (Recursive)
+
+/// Recursively calculates the total size of all files in a directory.
+/// Uses Apple FileManager APIs which properly handle firmlinks.
+/// Does NOT count directory entries themselves, only regular files.
+private func calculateDirectorySize(_ path: String) -> UInt64 {
+    let fm = FileManager.default
+    let url = URL(fileURLWithPath: path)
+    
+    let resourceKeys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey]
+    
+    // Use enumerator for recursive traversal. Apple APIs properly handle firmlinks.
+    // Do NOT skip hidden files or packages - .idea/, .build/, .git/, node_modules/ are largest!
+    let enumerator = fm.enumerator(
+        at: url,
+        includingPropertiesForKeys: resourceKeys,
+        options: []
+    )
+    
+    var totalSize: UInt64 = 0
+    
+    while let fileURL = enumerator?.nextObject() as? URL {
+        do {
+            let resourceValues = try fileURL.resourceValues(forKeys: Set(resourceKeys))
+            
+            // Only count regular files, not directories or symlinks
+            if resourceValues.isRegularFile == true {
+                if let fileSize = resourceValues.fileSize {
+                    totalSize += UInt64(fileSize)
+                }
+            }
+        } catch {
+            // Continue on per-file errors (permission issues, etc.)
+            continue
+        }
+    }
+    
+    return totalSize
+}
+
+/// Calculates actual disk blocks used (like `du -sk`).
+/// Returns size in bytes (1 block = 512 bytes, but du -sk reports in KB).
+/// More realistic for cleanup planning as it accounts for block allocation.
+func calculateBlockSize(_ path: String) -> UInt64 {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/du")
+    process.arguments = ["-sk", path]
+    
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    
+    do {
+        try process.run()
+        process.waitUntilExit()
+        
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        if let output = String(data: data, encoding: .utf8) {
+            let components = output.split(separator: "\t")
+            if let firstComponent = components.first,
+               let kb = UInt64(firstComponent.trimmingCharacters(in: .whitespaces)) {
+                return kb * 1024 // Convert KB to bytes
+            }
+        }
+    } catch {
+        // Fallback to file size calculation
+        return calculateDirectorySize(path)
+    }
+    
+    return calculateDirectorySize(path)
 }

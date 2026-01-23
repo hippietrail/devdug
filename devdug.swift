@@ -415,7 +415,7 @@ func scanHomeDirectoryForProjects(verbose: Bool = false, ui: TerminalUI? = nil) 
             
             // Try to detect project at this level
             if let type = detectProjectType(fullPath) {
-                let size = getDirectorySize(fullPath)
+               let size = getDirectorySize(fullPath)
                 let attributes = try? fm.attributesOfItem(atPath: fullPath)
                 let modDate = (attributes?[.modificationDate] as? Date) ?? Date()
                 
@@ -607,13 +607,37 @@ func detectProjectType(_ path: String) -> String? {
 
 func getDirectorySize(_ path: String) -> UInt64 {
     let fm = FileManager.default
+    let url = URL(fileURLWithPath: path)
     
-    do {
-        let attributes = try fm.attributesOfItem(atPath: path)
-        return attributes[.size] as? UInt64 ?? 0
-    } catch {
-        return 0
+    let resourceKeys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey]
+    
+    // Use enumerator for recursive traversal. Apple APIs properly handle firmlinks.
+    // Do NOT skip hidden files or packages - .idea/, .build/, .git/, node_modules/ are largest!
+    let enumerator = fm.enumerator(
+        at: url,
+        includingPropertiesForKeys: resourceKeys,
+        options: []
+    )
+    
+    var totalSize: UInt64 = 0
+    
+    while let fileURL = enumerator?.nextObject() as? URL {
+        do {
+            let resourceValues = try fileURL.resourceValues(forKeys: Set(resourceKeys))
+            
+            // Only count regular files, not directories or symlinks
+            if resourceValues.isRegularFile == true {
+                if let fileSize = resourceValues.fileSize {
+                    totalSize += UInt64(fileSize)
+                }
+            }
+        } catch {
+            // Continue on per-file errors (permission issues, etc.)
+            continue
+        }
     }
+    
+    return totalSize
 }
 
 func formatBytes(_ bytes: UInt64) -> String {
