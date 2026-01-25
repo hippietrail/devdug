@@ -214,8 +214,10 @@ public class ProjectDiscovery {
             // New cache will be written on next fresh discovery
             DispatchQueue.global(qos: .background).async { [weak self] in
                 let _ = self?.scanHomeDirectory(useBlocks: useBlocks)
-                // TODO (Phase B): Implement cache invalidation strategy
-                // Options: (1) update cache immediately after rescan, (2) only update if >X new projects found
+                // TODO (Phase B, ddg-c7w/ddg-4kv): Implement cache invalidation strategy
+                // - Option 1: Rerun full discovery and update cache if >X new projects found
+                // - Option 2: Implement FSEvents watcher (Phase C, ddg-h8z) for true incremental updates
+                // - Option 3: Keep async rescan simple, update cache on explicit refresh (ddg-4kv)
             }
             
             return cached.projects
@@ -228,8 +230,13 @@ public class ProjectDiscovery {
         // - Each directory is small-ish
         // - No recursive home directory scan yet
         let standardLocations = getStandardIDELocations()
-        let ideProjects = discoverProjects(in: standardLocations, useBlocks: useBlocks)
+        var ideProjects = discoverProjects(in: standardLocations, useBlocks: useBlocks)
         timer.elapsed("discoverProjects() returned \(ideProjects.count) IDE projects")
+        
+        // Sort IDE projects the same way as final set will be sorted
+        // This prevents visual reordering when Phase 4 merges everything
+        // (UX: grid items stay in same position when final set arrives)
+        ideProjects.sort { $0.name.lowercased() < $1.name.lowercased() }
         
         // Fire IDE callback so UI can show something at 300ms
         // Users see projects quickly, can start interacting while home scan continues
@@ -239,17 +246,17 @@ public class ProjectDiscovery {
         // This is the critical bottleneck consuming 97% of startup time.
         // Recursive filesystem traversal of entire ~/. Returns ~92 projects.
         // 
-        // PERFORMANCE ANALYSIS NEEDED (Phase B, ddg-4co):
-        // - Is scanHomeDirectory I/O-bound or CPU-bound?
-        // - How many filesystem calls? (likely 1000s)
-        // - Where are the hot spots? (Use Instruments: System Trace, File Activity, Time Profiler)
-        // - Is it the recursive enumeration? Pattern matching? Directory metadata?
+        // TODO (Phase B, ddg-4co): Profile scanHomeDirectory with Instruments
+        // - Use System Trace, File Activity, Time Profiler
+        // - Measure: I/O vs CPU, filesystem call count, recursion depth
+        // - Find hot spots in scanHomeDirectory() → detectProjectType() → file enumeration
         // 
-        // After profiling, Phase B optimizations (ddg-u6f):
-        // - Option 1: Limit recursion depth (2-3 levels, skip .*, node_modules, .cargo)
-        // - Option 2: Use FSEvents for incremental updates (cache-aware)
-        // - Option 3: Parallelize scanning across multiple directories
-        // - Option 4: Rewrite to use different traversal method
+        // TODO (Phase B, ddg-u6f): Optimize scanHomeDirectory based on profiling
+        // - Option 1: Limit recursion depth (2-3 levels, skip .*, node_modules, .cargo, .build, .git)
+        // - Option 2: Use FSEvents for incremental updates (combines with cache invalidation)
+        // - Option 3: Parallelize directory scanning (scan multiple branches concurrently)
+        // - Option 4: Rewrite enumeration strategy based on profiling findings
+        // - Goal: 11.4s → 2-5s or support incremental cache updates
         let homeProjects = scanHomeDirectory(useBlocks: useBlocks)
         timer.elapsed("scanHomeDirectory() returned \(homeProjects.count) home projects")
         
@@ -274,6 +281,33 @@ public class ProjectDiscovery {
         // This is the 100x speedup from Phase A (ddg-c7w)
         cacheManager.saveCache(allProjects)
         timer.elapsed("Saved \(allProjects.count) projects to cache")
+        
+        // TODO (Phase B, ddg-2im): Parallelize IDE location scanning
+        // - Current: sequential loop over 7 locations (304ms)
+        // - Optimization: DispatchQueue.concurrentPerform() across locations
+        // - Expected: 304ms → 60-100ms (5-7x speedup)
+        // - Impact: Minor but easy win; do after primary bottleneck fixed
+        
+        // TODO (Phase C, ddg-195): Add progress indicator during discovery
+        // - Show "Discovering projects..." with spinner
+        // - Update: "Found N IDE projects...", "Scanning home directory (M found)..."
+        // - Makes wait feel less frozen; pairs with async rescan notifications
+        
+        // TODO (Phase C, ddg-3c5): Test grid rebuild scaling
+        // - Current: 10ms for 114 projects (0.088ms/project)
+        // - Extrapolate: 1000 projects → ~88ms (acceptable)
+        // - 5000+ projects → profile if nonlinear
+        // - May need virtualization or lazy loading for huge project counts
+        
+        // TODO (Phase C, ddg-h8z): Implement configurable scan depth
+        // - After profiling Phase B: if recursion depth is bottleneck, add limit
+        // - Settings: max depth (default: unlimited), excluded directories
+        // - Trade-off: Speed vs completeness of project discovery
+        
+        // TODO (Phase C, ddg-u1v): Measure memory baseline
+        // - Current: 114 projects, ~1000+ NSView subviews in GUI
+        // - Target: <100MB per 1000 projects
+        // - Identify high-memory code paths (grid cells, caching strategy)
         
         // Fire final callback with complete project list
         onAllProjectsFound?(allProjects)
